@@ -18,7 +18,8 @@ def get_conn():
 
 @app.route("/")
 def index():
-    return "FairShift MVP is running!"
+    return render_template("index.html")
+
 
 
 @app.route("/staff")
