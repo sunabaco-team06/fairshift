@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>欠勤スタッフ選択</title>
+</head>
+<body>
+  <h1>欠勤スタッフ選択</h1>
+
+  <form action="/visits" method="get">
+    <div>
+      <label for="staff_id">欠勤スタッフ：</label>
+      <select name="staff_id" id="staff_id" required>
+        <option value="">選択してください</option>
+        {% for s in staff %}
+          <option value="{{ s.id }}">{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label for="date">日付：</label>
+      <input type="date" id="date" name="date" value="2026-03-02" required>
+    </div>
+
+    <div>
+      <button type="submit">訪問一覧を見る</button>
+    </div>
+  </form>
+
+  <p><a href="/">← トップへ戻る</a></p>
+</body>
+</html>
