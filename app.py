@@ -1,4 +1,4 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 import sqlite3
 from pathlib import Path
 
@@ -10,7 +10,6 @@ DB_PATH = BASE_DIR / "fairshift.db"
 
 
 def get_conn():
-    """SQLite接続（Rowでdictっぽく扱う）"""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
@@ -19,13 +18,11 @@ def get_conn():
 
 @app.route("/")
 def index():
-    """トップ画面"""
     return render_template("index.html")
 
 
 @app.route("/staff")
 def staff_list():
-    """スタッフ一覧（DBから取得して表示）"""
     conn = get_conn()
     staff = conn.execute(
         "SELECT id, name, gender, role, created_at FROM staff ORDER BY id"
@@ -36,26 +33,44 @@ def staff_list():
 
 
 # ----------------------------
-# Day2 / Day3 で追加予定のルート（いまは未実装）
+# ✅ Day2：ここが今日の本番
 # ----------------------------
 @app.route("/absent")
-def absent_placeholder():
-    return "Not implemented yet. (Day2) 欠勤スタッフ選択画面を作成予定", 501
+def absent():
+    return render_template("absent.html")
 
 
 @app.route("/visits")
-def visits_placeholder():
-    return "Not implemented yet. (Day2) 訪問一覧画面を作成予定", 501
+def visits():
+    staff_id = request.args.get("staff_id")
+    date = request.args.get("date")
+
+    # Day2なので仮データ
+    visits = [
+        {"time": "09:00", "user": "田中太郎", "area": "中央区"},
+        {"time": "11:00", "user": "佐藤花子", "area": "港区"},
+        {"time": "14:00", "user": "鈴木一郎", "area": "新宿区"},
+    ]
+
+    return render_template(
+        "visits.html",
+        staff_id=staff_id,
+        date=date,
+        visits=visits
+    )
 
 
+# ----------------------------
+# まだ作らない（Day3以降）
+# ----------------------------
 @app.route("/result")
 def result_placeholder():
-    return "Not implemented yet. (Day3) 振替候補表示画面を作成予定", 501
+    return "Not implemented yet. (Day3)", 501
 
 
 @app.route("/staff_adjust")
 def staff_adjust_placeholder():
-    return "Not implemented yet. (Day4+) 減点設定は後で実装予定", 501
+    return "Not implemented yet. (Day4+)", 501
 
 
 if __name__ == "__main__":

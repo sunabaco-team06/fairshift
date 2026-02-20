@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>訪問一覧</title>
+</head>
+<body>
+  <h2>訪問一覧</h2>
+<p>欠勤スタッフID：{{ staff_id }}</p>
+<p>日付：{{ date }}</p>
+
+  <table border="1" cellpadding="8">
+    <thead>
+      <tr>
+        <th>時間</th>
+        <th>利用者名</th>
+        <th>エリア名</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for visit in visits %}
+      <tr>
+        <td>{{ visit.time }}</td>
+        <td>{{ visit.user }}</td>
+        <td>{{ visit.area }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p>
+<a href="/absent">← 欠勤スタッフ選択に戻る</a>
+  </p>
+</body>
+</html>
