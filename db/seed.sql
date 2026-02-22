@@ -1,23 +1,16 @@
+INSERT INTO "areas" VALUES(1,'第一');
+INSERT INTO "areas" VALUES(2,'第二');
+INSERT INTO "areas" VALUES(3,'第三');
+INSERT INTO "areas" VALUES(4,'第四');
+INSERT INTO "areas" VALUES(5,'第五');
+INSERT INTO "areas" VALUES(6,'第六');
+INSERT INTO "areas" VALUES(7,'第七');
+INSERT INTO "areas" VALUES(8,'第八');
+INSERT INTO "areas" VALUES(9,'第九');
+INSERT INTO "areas" VALUES(10,'第十');
+INSERT INTO "areas" VALUES(11,'友呂岐');
+INSERT INTO "areas" VALUES(12,'中木田');
 
-CREATE TABLE area_edges (
-
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-  area_id INTEGER NOT NULL,
-
-  neighbor_area_id INTEGER NOT NULL,
-
-  cost INTEGER NOT NULL DEFAULT 1,
-
-  FOREIGN KEY (area_id) REFERENCES areas(id) ON DELETE CASCADE,
-
-  FOREIGN KEY (neighbor_area_id) REFERENCES areas(id) ON DELETE CASCADE,
-
-  CHECK (area_id <> neighbor_area_id),
-
-  UNIQUE (area_id, neighbor_area_id)
-
-);
 INSERT INTO "area_edges" VALUES(331,1,3,1);
 INSERT INTO "area_edges" VALUES(332,1,6,1);
 INSERT INTO "area_edges" VALUES(333,1,10,1);
@@ -64,100 +57,13 @@ INSERT INTO "area_edges" VALUES(373,12,1,1);
 INSERT INTO "area_edges" VALUES(374,12,7,1);
 INSERT INTO "area_edges" VALUES(375,12,5,1);
 INSERT INTO "area_edges" VALUES(376,12,9,1);
-CREATE TABLE areas (
 
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-  name TEXT NOT NULL UNIQUE
-
-);
-INSERT INTO "areas" VALUES(1,'第一');
-INSERT INTO "areas" VALUES(2,'第二');
-INSERT INTO "areas" VALUES(3,'第三');
-INSERT INTO "areas" VALUES(4,'第四');
-INSERT INTO "areas" VALUES(5,'第五');
-INSERT INTO "areas" VALUES(6,'第六');
-INSERT INTO "areas" VALUES(7,'第七');
-INSERT INTO "areas" VALUES(8,'第八');
-INSERT INTO "areas" VALUES(9,'第九');
-INSERT INTO "areas" VALUES(10,'第十');
-INSERT INTO "areas" VALUES(11,'友呂岐');
-INSERT INTO "areas" VALUES(12,'中木田');
-CREATE TABLE staff (
-
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-  name TEXT NOT NULL UNIQUE,
-
-  gender TEXT NOT NULL CHECK (gender IN ('F','M','O')),
-
-  role TEXT NOT NULL CHECK (role IN ('nurse','pt','ot')),
-
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-
-);
 INSERT INTO "staff" VALUES(1,'一野','F','pt','2026-02-19 10:51:37');
 INSERT INTO "staff" VALUES(2,'二村','M','pt','2026-02-19 10:51:37');
 INSERT INTO "staff" VALUES(3,'三見','M','ot','2026-02-19 10:51:37');
 INSERT INTO "staff" VALUES(4,'四賀','M','pt','2026-02-19 10:51:37');
 INSERT INTO "staff" VALUES(5,'五松','F','ot','2026-02-20 10:50:29');
-CREATE TABLE staff_unavailable (
 
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-  staff_id INTEGER NOT NULL,
-
-  date TEXT NOT NULL,               -- 'YYYY-MM-DD'
-
-  time TEXT NOT NULL,               -- '09:00'
-
-  reason TEXT,
-
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-
-  FOREIGN KEY (staff_id) REFERENCES staff(id),
-
-  UNIQUE (staff_id, date, time)
-
-);
-CREATE TABLE user_ng_staff (
-
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-  user_id INTEGER NOT NULL,
-
-  staff_id INTEGER NOT NULL,
-
-  reason TEXT,
-
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-
-  FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE,
-
-  UNIQUE (user_id, staff_id)
-
-);
-CREATE TABLE users (
-
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-  name TEXT NOT NULL UNIQUE,
-
-  area_id INTEGER NOT NULL,
-
-  gender_preference TEXT NOT NULL CHECK (gender_preference IN ('any','female_only','male_only')),
-
-  role_required TEXT NOT NULL CHECK (role_required IN ('any','nurse_only','pt_only','ot_only')),
-
-  priority TEXT NOT NULL CHECK (priority IN ('today_required','tomorrow_ok','week_ok')),
-
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-
-  FOREIGN KEY (area_id) REFERENCES areas(id)
-
-);
 INSERT INTO "users" VALUES(1,'山田1',1,'any','any','today_required','2026-02-20 12:40:54');
 INSERT INTO "users" VALUES(2,'佐藤2',1,'any','any','today_required','2026-02-20 12:40:54');
 INSERT INTO "users" VALUES(3,'鈴木3',1,'any','any','today_required','2026-02-20 12:40:54');
@@ -258,33 +164,3 @@ INSERT INTO "users" VALUES(97,'平田97',12,'any','any','today_required','2026-0
 INSERT INTO "users" VALUES(98,'荒木98',12,'any','any','tomorrow_ok','2026-02-20 12:40:54');
 INSERT INTO "users" VALUES(99,'大島99',12,'female_only','any','week_ok','2026-02-20 12:40:54');
 INSERT INTO "users" VALUES(100,'川崎100',12,'male_only','any','today_required','2026-02-20 12:40:54');
-CREATE TABLE visits (
-
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-  staff_id INTEGER NOT NULL,
-
-  user_id INTEGER NOT NULL,
-
-  visit_date TEXT NOT NULL,         -- 'YYYY-MM-DD'
-
-  visit_time TEXT NOT NULL,         -- '09:00' 形式
-
-  status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','reassigned')),
-
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-
-  FOREIGN KEY (staff_id) REFERENCES staff(id),
-
-  FOREIGN KEY (user_id) REFERENCES users(id),
-
-  UNIQUE (staff_id, visit_date, visit_time)  -- 同一スタッフの同時間帯は1件に制限（MVP向け）
-
-);
-DELETE FROM "sqlite_sequence";
-INSERT INTO "sqlite_sequence" VALUES('areas',12);
-INSERT INTO "sqlite_sequence" VALUES('area_edges',376);
-INSERT INTO "sqlite_sequence" VALUES('staff',5);
-INSERT INTO "sqlite_sequence" VALUES('user_ng_staff',1);
-INSERT INTO "sqlite_sequence" VALUES('users',100);
-
