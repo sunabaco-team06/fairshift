@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, abort
+from flask import Flask, render_template, request, abort, Response
+import json
 import sqlite3
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
@@ -79,6 +80,17 @@ def fetch_user_area_id(user_id: int) -> Optional[int]:
     finally:
         conn.close()
 
+def fetch_user_profile(user_id: int) -> sqlite3.Row:
+    conn = get_conn()
+    try:
+        row = conn.execute("""
+            SELECT id, area_id, gender_preference
+            FROM users
+            WHERE id = ?
+        """, (user_id,)).fetchone()
+        return row
+    finally:
+        conn.close()
 
 def fetch_user_name(user_id: int) -> Optional[str]:
     """対象利用者の名前を取得（result表示用）"""
@@ -106,7 +118,7 @@ def fetch_candidate_staff_raw(user_id: int, date: str, time: str) -> List[sqlite
     conn = get_conn()
     try:
         return conn.execute("""
-            SELECT s.id, s.name
+            SELECT s.id, s.name, s.gender
             FROM staff s
             WHERE s.id NOT IN (
                 SELECT staff_id
@@ -123,7 +135,6 @@ def fetch_candidate_staff_raw(user_id: int, date: str, time: str) -> List[sqlite
         """, (date, time, user_id)).fetchall()
     finally:
         conn.close()
-
 
 def fetch_prev_next_visit(
     staff_id: int,
@@ -228,21 +239,26 @@ def distance_to_rank_points(dist: Optional[int]) -> Tuple[int, Optional[str]]:
         return 1, "△"
     return 0, "×"
 
-
 # ----------------------------
 # Candidate building
 # ----------------------------
 def build_candidate_cards(user_id: int, date: str, time: str) -> List[Dict[str, Any]]:
     """候補スタッフをスコア＋理由付きで返す（上位3名に絞る）"""
+
     rows = fetch_candidate_staff_raw(user_id, date, time)
 
     target_area_id = fetch_user_area_id(user_id)
+    user_profile = fetch_user_profile(user_id)  # gender_preference取得用
+    gender_pref = user_profile["gender_preference"]
+
     graph = fetch_area_adjacency()
 
     candidates: List[Dict[str, Any]] = []
+
     for r in rows:
         staff_id = int(r["id"])
         staff_name = r["name"]
+        staff_gender = r["gender"]  # ← raw取得時にgenderもselectしている前提
 
         score = 0
         reasons: List[str] = [
@@ -250,6 +266,29 @@ def build_candidate_cards(user_id: int, date: str, time: str) -> List[Dict[str, 
             "NGスタッフではない",
         ]
 
+        # ----------------------------
+        # gender適合（減点方式）
+        # ----------------------------
+        if gender_pref == "any":
+            reasons.append("性別条件なし（any）")
+        elif gender_pref == "female_only":
+            if staff_gender == "F":
+                score += 2
+                reasons.append("性別一致（女性） +2")
+            else:
+                score -= 2
+                reasons.append("性別不一致（女性希望） -2")
+        elif gender_pref == "male_only":
+            if staff_gender == "M":
+                score += 2
+                reasons.append("性別一致（男性） +2")
+            else:
+                score -= 2
+                reasons.append("性別不一致（男性希望） -2")
+
+        # ----------------------------
+        # エリア評価
+        # ----------------------------
         if target_area_id is None:
             reasons.append("利用者エリアが不明のため移動評価なし")
             candidates.append({
@@ -269,16 +308,19 @@ def build_candidate_cards(user_id: int, date: str, time: str) -> List[Dict[str, 
             prev_area_id = int(prev_row["area_id"])
             prev_time = prev_row["visit_time"]
             prev_dist = get_area_distance_bfs_cached(graph, prev_area_id, target_area_id)
-            reasons.append(f"前の訪問({prev_time})からの距離: {prev_dist if prev_dist is not None else '不明'}")
+            reasons.append(
+                f"前の訪問({prev_time})からの距離: {prev_dist if prev_dist is not None else '不明'}"
+            )
 
         if next_row is not None:
             next_area_id = int(next_row["area_id"])
             next_time = next_row["visit_time"]
             next_dist = get_area_distance_bfs_cached(graph, target_area_id, next_area_id)
-            reasons.append(f"次の訪問({next_time})への距離: {next_dist if next_dist is not None else '不明'}")
+            reasons.append(
+                f"次の訪問({next_time})への距離: {next_dist if next_dist is not None else '不明'}"
+            )
 
-        # 前後が両方あるなら「大きい方」を採用（どちらかが遠いと厳しい）
-        effective_dist: Optional[int]
+        # 両方ある場合は遠い方を採用（移動として厳しい側）
         if prev_dist is None and next_dist is None:
             effective_dist = None
             reasons.append("前後の訪問がなく移動評価なし")
@@ -309,7 +351,6 @@ def build_candidate_cards(user_id: int, date: str, time: str) -> List[Dict[str, 
 
     candidates.sort(key=lambda x: (-x["score"], x["staff_id"]))
     return candidates[:3]
-
 
 # ----------------------------
 # Helper functions
@@ -373,7 +414,7 @@ def visits():
 @app.route("/result")
 def result_json():
     """
-    ToDo3(A): /result の最小実装（JSON）
+    /result の最小実装（JSON）
     例:
       /result?user_id=17&date=2026-03-02&time=10:00
     """
@@ -384,13 +425,19 @@ def result_json():
     user_name = fetch_user_name(user_id)
     candidates = build_candidate_cards(user_id, date, time)
 
-    return {
+    data = {
         "user_id": user_id,
         "user_name": user_name,
         "date": date,
         "time": time,
         "top3": candidates,
     }
+
+    # 日本語をそのまま表示できるようにして返す
+    return Response(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        mimetype="application/json; charset=utf-8"
+    )
 
 
 @app.route("/staff_adjust")
