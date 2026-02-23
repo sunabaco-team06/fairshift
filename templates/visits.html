@@ -2,43 +2,76 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>訪問一覧</title>
+  <title>欠勤者の訪問一覧</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body>
-  <h1>訪問一覧</h1>
-  <p>欠勤スタッフID：{{ staff_id }}</p>
-  <p>日付：{{ date }}</p>
+<body class="bg-light">
+  <div class="container py-4">
 
-  <hr>
+    <div class="d-flex justify-content-between align-items-end mb-3">
+      <div>
+        <h2 class="fw-bold mb-1">欠勤者の訪問一覧（今日）</h2>
+        <div class="text-muted">日付：{{ date }}</div>
+        <div class="text-muted">欠勤者：{{ absent_names|join("、") if absent_names else "未選択" }}</div>
+      </div>
+      <div>
+        <a href="/" class="btn btn-outline-secondary">← トップへ</a>
+      </div>
+    </div>
 
-  <h2>デバッグ</h2>
-  <p>visits 件数：{{ visits|length }}</p>
+    <div class="card">
+      <div class="card-header fw-bold">① 振替したい訪問を選択（複数OK）</div>
+      <div class="card-body">
 
-  <hr>
+        {% if visits|length == 0 %}
+          <div class="alert alert-warning mb-0">
+            この条件の訪問はありません（データ0件）
+          </div>
+        {% else %}
+          <form method="POST" action="/result_batch">
+            <input type="hidden" name="date" value="{{ date }}">
 
-  {% if visits|length == 0 %}
-    <p>この条件の訪問はありません（データ0件）</p>
-  {% else %}
-    <table border="1" cellpadding="8">
-      <thead>
-        <tr>
-          <th>時間</th>
-          <th>利用者名</th>
-          <th>エリア名</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for v in visits %}
-        <tr>
-          <td>{{ v["visit_time"] }}</td>
-          <td>{{ v["user_name"] }}</td>
-          <td>{{ v["area_name"] }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endif %}
+            <div class="table-responsive">
+              <table class="table table-bordered align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width:80px;">選択</th>
+                    <th style="width:120px;">時間</th>
+                    <th>利用者</th>
+                    <th style="width:160px;">エリア</th>
+                    <th style="width:160px;">元担当（欠勤）</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for v in visits %}
+                  <tr>
+                    <td class="text-center">
+                      <input type="checkbox" name="visit_ids" value="{{ v.id }}">
+                    </td>
+                    <td>{{ v.visit_time }}</td>
+                    <td>{{ v.user_name }}</td>
+                    <td>{{ v.area_name }}</td>
+                    <td>{{ v.staff_name }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
 
-  <p><a href="/absent">← 欠勤スタッフ選択に戻る</a></p>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary">候補を見る</button>
+              <a href="/" class="btn btn-outline-secondary">キャンセル</a>
+            </div>
+
+            <div class="text-muted small mt-2">
+              ※ここで複数選ぶ → 次の画面で「訪問ごとに上位3名」を確認できます
+            </div>
+          </form>
+        {% endif %}
+
+      </div>
+    </div>
+
+  </div>
 </body>
 </html>

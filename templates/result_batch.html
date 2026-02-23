@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>振替候補（まとめ）</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .reason { font-size: 12px; color: #666; }
+    .score { font-weight: 700; }
+    .badge-mini { font-size: 11px; }
+    .cell-muted { color: #888; font-size: 12px; }
+  </style>
+</head>
+<body class="bg-light">
+  <div class="container py-4">
+
+    <div class="d-flex justify-content-between align-items-end mb-3">
+      <div>
+        <h2 class="fw-bold mb-1">振替候補（訪問ごとに上位3名）</h2>
+        <div class="text-muted">日付：{{ date }}</div>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="/" class="btn btn-outline-secondary">← トップへ</a>
+      </div>
+    </div>
+
+    {% if results|length == 0 %}
+      <div class="alert alert-warning">対象データがありません</div>
+    {% endif %}
+
+    {% for r in results %}
+      <div class="card mb-3">
+        <div class="card-header fw-bold">
+          {{ r.visit.visit_time }}｜{{ r.visit.user_name }}（{{ r.visit.area_name }}）
+          <span class="text-muted fw-normal ms-2">元担当：{{ r.visit.staff_name }}</span>
+        </div>
+
+        <div class="card-body">
+          {% if r.candidates|length == 0 %}
+            <div class="alert alert-secondary mb-0">
+              振替対応可能なスタッフがいません（同時間帯/別時間含めて候補なし）
+            </div>
+          {% else %}
+            <div class="table-responsive">
+              <table class="table table-bordered align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width:80px;">順位</th>
+                    <th>スタッフ</th>
+                    <th style="width:120px;">枠（時間）</th>
+                    <th style="width:120px;">スコア</th>
+                    <th>理由（要点）</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for c in r.candidates %}
+                  <tr>
+                    <td class="text-center">
+                      {{ loop.index }}
+                      {% if c.is_fallback %}
+                        <span class="badge text-bg-warning badge-mini ms-1">別時間</span>
+                      {% else %}
+                        <span class="badge text-bg-success badge-mini ms-1">同時間</span>
+                      {% endif %}
+                    </td>
+
+                    <td>{{ c.staff_name }}</td>
+
+                    <td class="text-center">
+                      {% if c.proposed_time %}
+                        {{ c.proposed_time }}
+                        {% if c.proposed_time != r.visit.visit_time %}
+                          <div class="cell-muted">（元: {{ r.visit.visit_time }}）</div>
+                        {% endif %}
+                      {% else %}
+                        <span class="cell-muted">-</span>
+                      {% endif %}
+                    </td>
+
+                    <td class="text-center score">{{ c.score }}</td>
+
+                    <td class="reason">
+                      <ul class="mb-0">
+                        {% for reason in c.reasons %}
+                          <li>{{ reason }}</li>
+                        {% endfor %}
+                      </ul>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+
+    <div class="text-muted small">
+      ※今日は「見える化」優先（振替確定は次の段階で追加）
+      <br>
+      ※「別時間」は、同時間帯の候補が0件だった場合に、9:00〜18:00の空き枠から候補を作っています。
+    </div>
+
+  </div>
+</body>
+</html>

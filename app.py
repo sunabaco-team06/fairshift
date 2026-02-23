@@ -4,11 +4,15 @@ import sqlite3
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
 from collections import deque
+from datetime import date as dt_date
 
 app = Flask(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "fairshift.db"
+
+# スケジュール表示の時間枠（前提：1時間枠）
+SLOTS = [f"{h:02d}:00" for h in range(9, 19)]  # 09:00〜18:00
 
 
 # ----------------------------
@@ -20,6 +24,52 @@ def get_conn() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
+
+# ----------------------------
+# Helper functions
+# ----------------------------
+def today_str() -> str:
+    return dt_date.today().isoformat()
+
+
+def parse_int(value: Optional[str], field_name: str) -> int:
+    if value is None or value == "":
+        abort(400, description=f"{field_name} が必要です")
+    try:
+        return int(value)
+    except ValueError:
+        abort(400, description=f"{field_name} は整数で指定してください")
+
+
+def parse_date(value: Optional[str]) -> str:
+    if value is None or value == "":
+        abort(400, description="date が必要です（YYYY-MM-DD）")
+    return value
+
+
+def parse_time(value: Optional[str]) -> str:
+    if value is None or value == "":
+        abort(400, description="time が必要です（HH:MM）")
+    return value
+
+def time_to_minutes(t: str) -> int:
+    # "09:00" -> 540
+    hh, mm = t.split(":")
+    return int(hh) * 60 + int(mm)
+
+def hour_diff(a: str, b: str) -> int:
+    # aとbの差（時間単位、四捨五入なしで 60分=1 として計算）
+    return abs(time_to_minutes(a) - time_to_minutes(b)) // 60
+
+def time_diff_points(diff_hours: int) -> int:
+    # 時間ずれが小さいほど加点（好みで調整OK）
+    if diff_hours == 0:
+        return 3
+    if diff_hours == 1:
+        return 2
+    if diff_hours == 2:
+        return 1
+    return 0
 
 # ----------------------------
 # DB query functions
@@ -37,9 +87,7 @@ def fetch_staff_full() -> List[sqlite3.Row]:
 def fetch_staff_simple() -> List[sqlite3.Row]:
     conn = get_conn()
     try:
-        return conn.execute(
-            "SELECT id, name FROM staff ORDER BY id"
-        ).fetchall()
+        return conn.execute("SELECT id, name FROM staff ORDER BY id").fetchall()
     finally:
         conn.close()
 
@@ -65,8 +113,89 @@ def fetch_today_visits(staff_id: int, date: str) -> List[sqlite3.Row]:
         conn.close()
 
 
+def fetch_today_visits_for_absent_staff_ids(staff_ids: List[int], date: str) -> List[sqlite3.Row]:
+    if not staff_ids:
+        return []
+
+    placeholders = ",".join(["?"] * len(staff_ids))
+    conn = get_conn()
+    try:
+        return conn.execute(f"""
+            SELECT v.id,
+                   v.visit_time,
+                   v.user_id,
+                   u.name AS user_name,
+                   a.name AS area_name,
+                   s.name AS staff_name
+            FROM visits v
+            JOIN users u ON u.id = v.user_id
+            JOIN areas a ON a.id = u.area_id
+            JOIN staff s ON s.id = v.staff_id
+            WHERE v.visit_date = ?
+              AND v.staff_id IN ({placeholders})
+            ORDER BY v.visit_time
+        """, (date, *staff_ids)).fetchall()
+    finally:
+        conn.close()
+
+
+def fetch_visit_detail(visit_id: int) -> Optional[sqlite3.Row]:
+    conn = get_conn()
+    try:
+        return conn.execute("""
+            SELECT v.id,
+                   v.visit_date,
+                   v.visit_time,
+                   v.staff_id,
+                   v.user_id,
+                   u.name AS user_name,
+                   a.name AS area_name,
+                   s.name AS staff_name
+            FROM visits v
+            JOIN users u ON u.id = v.user_id
+            JOIN areas a ON a.id = u.area_id
+            JOIN staff s ON s.id = v.staff_id
+            WHERE v.id = ?
+        """, (visit_id,)).fetchone()
+    finally:
+        conn.close()
+
+def fetch_busy_times_for_staff(date: str) -> Dict[int, set]:
+    """
+    { staff_id: {"09:00","10:00",...} } を返す
+    """
+    conn = get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT staff_id, visit_time
+            FROM visits
+            WHERE visit_date = ?
+        """, (date,)).fetchall()
+
+        busy: Dict[int, set] = {}
+        for r in rows:
+            sid = int(r["staff_id"])
+            busy.setdefault(sid, set()).add(str(r["visit_time"]))
+        return busy
+    finally:
+        conn.close()
+
+
+def fetch_free_slots_by_staff(date: str, slots: List[str]) -> Dict[int, List[str]]:
+    """
+    { staff_id: ["09:00","12:00",...] } を返す
+    """
+    staff = fetch_staff_simple()
+    busy = fetch_busy_times_for_staff(date)
+
+    free: Dict[int, List[str]] = {}
+    for s in staff:
+        sid = int(s["id"])
+        busy_set = busy.get(sid, set())
+        free[sid] = [t for t in slots if t not in busy_set]
+    return free
+
 def fetch_user_area_id(user_id: int) -> Optional[int]:
-    """対象利用者のエリアIDを取得"""
     conn = get_conn()
     try:
         row = conn.execute("""
@@ -80,6 +209,7 @@ def fetch_user_area_id(user_id: int) -> Optional[int]:
     finally:
         conn.close()
 
+
 def fetch_user_profile(user_id: int) -> sqlite3.Row:
     conn = get_conn()
     try:
@@ -92,8 +222,8 @@ def fetch_user_profile(user_id: int) -> sqlite3.Row:
     finally:
         conn.close()
 
+
 def fetch_user_name(user_id: int) -> Optional[str]:
-    """対象利用者の名前を取得（result表示用）"""
     conn = get_conn()
     try:
         row = conn.execute("""
@@ -136,17 +266,12 @@ def fetch_candidate_staff_raw(user_id: int, date: str, time: str) -> List[sqlite
     finally:
         conn.close()
 
+
 def fetch_prev_next_visit(
     staff_id: int,
     date: str,
     time: str
 ) -> Tuple[Optional[sqlite3.Row], Optional[sqlite3.Row]]:
-    """
-    同日・同スタッフで、対象時間より
-    - 前（prev）：最大の訪問（visit_timeが一番近い過去）
-    - 後（next）：最小の訪問（visit_timeが一番近い未来）
-    を取得する。
-    """
     conn = get_conn()
     try:
         prev_row = conn.execute("""
@@ -180,7 +305,6 @@ def fetch_prev_next_visit(
 # Area distance (BFS)
 # ----------------------------
 def fetch_area_adjacency() -> Dict[int, List[int]]:
-    """area_edges から隣接リスト（グラフ）を作る（cost=1前提）"""
     conn = get_conn()
     try:
         rows = conn.execute("""
@@ -204,10 +328,8 @@ def get_area_distance_bfs_cached(
     from_area_id: int,
     to_area_id: int
 ) -> Optional[int]:
-    """BFSで最短距離（辺の数）を返す。到達不可ならNone。"""
     if from_area_id == to_area_id:
         return 0
-
     if from_area_id not in graph:
         return None
 
@@ -228,7 +350,6 @@ def get_area_distance_bfs_cached(
 
 
 def distance_to_rank_points(dist: Optional[int]) -> Tuple[int, Optional[str]]:
-    """距離→加点と記号（◎○△×）に変換"""
     if dist is None:
         return 0, None
     if dist == 0:
@@ -239,26 +360,24 @@ def distance_to_rank_points(dist: Optional[int]) -> Tuple[int, Optional[str]]:
         return 1, "△"
     return 0, "×"
 
+
 # ----------------------------
 # Candidate building
 # ----------------------------
 def build_candidate_cards(user_id: int, date: str, time: str) -> List[Dict[str, Any]]:
-    """候補スタッフをスコア＋理由付きで返す（上位3名に絞る）"""
-
     rows = fetch_candidate_staff_raw(user_id, date, time)
 
     target_area_id = fetch_user_area_id(user_id)
-    user_profile = fetch_user_profile(user_id)  # gender_preference取得用
+    user_profile = fetch_user_profile(user_id)
     gender_pref = user_profile["gender_preference"]
 
     graph = fetch_area_adjacency()
-
     candidates: List[Dict[str, Any]] = []
 
     for r in rows:
         staff_id = int(r["id"])
         staff_name = r["name"]
-        staff_gender = r["gender"]  # ← raw取得時にgenderもselectしている前提
+        staff_gender = r["gender"]
 
         score = 0
         reasons: List[str] = [
@@ -266,9 +385,7 @@ def build_candidate_cards(user_id: int, date: str, time: str) -> List[Dict[str, 
             "NGスタッフではない",
         ]
 
-        # ----------------------------
         # gender適合（減点方式）
-        # ----------------------------
         if gender_pref == "any":
             reasons.append("性別条件なし（any）")
         elif gender_pref == "female_only":
@@ -286,9 +403,7 @@ def build_candidate_cards(user_id: int, date: str, time: str) -> List[Dict[str, 
                 score -= 2
                 reasons.append("性別不一致（男性希望） -2")
 
-        # ----------------------------
         # エリア評価
-        # ----------------------------
         if target_area_id is None:
             reasons.append("利用者エリアが不明のため移動評価なし")
             candidates.append({
@@ -308,19 +423,14 @@ def build_candidate_cards(user_id: int, date: str, time: str) -> List[Dict[str, 
             prev_area_id = int(prev_row["area_id"])
             prev_time = prev_row["visit_time"]
             prev_dist = get_area_distance_bfs_cached(graph, prev_area_id, target_area_id)
-            reasons.append(
-                f"前の訪問({prev_time})からの距離: {prev_dist if prev_dist is not None else '不明'}"
-            )
+            reasons.append(f"前の訪問({prev_time})からの距離: {prev_dist if prev_dist is not None else '不明'}")
 
         if next_row is not None:
             next_area_id = int(next_row["area_id"])
             next_time = next_row["visit_time"]
             next_dist = get_area_distance_bfs_cached(graph, target_area_id, next_area_id)
-            reasons.append(
-                f"次の訪問({next_time})への距離: {next_dist if next_dist is not None else '不明'}"
-            )
+            reasons.append(f"次の訪問({next_time})への距離: {next_dist if next_dist is not None else '不明'}")
 
-        # 両方ある場合は遠い方を採用（移動として厳しい側）
         if prev_dist is None and next_dist is None:
             effective_dist = None
             reasons.append("前後の訪問がなく移動評価なし")
@@ -352,28 +462,190 @@ def build_candidate_cards(user_id: int, date: str, time: str) -> List[Dict[str, 
     candidates.sort(key=lambda x: (-x["score"], x["staff_id"]))
     return candidates[:3]
 
-# ----------------------------
-# Helper functions
-# ----------------------------
-def parse_int(value: Optional[str], field_name: str) -> int:
-    if value is None or value == "":
-        abort(400, description=f"{field_name} が必要です")
+def build_candidate_slots_fallback(
+    user_id: int,
+    date: str,
+    original_time: str,
+    exclude_staff_ids: Optional[List[int]] = None
+) -> List[Dict[str, Any]]:
+    exclude_set = set(exclude_staff_ids or [])
+
+    # NGスタッフ一覧
+    conn = get_conn()
     try:
-        return int(value)
-    except ValueError:
-        abort(400, description=f"{field_name} は整数で指定してください")
+        ng_rows = conn.execute("""
+            SELECT staff_id
+            FROM user_ng_staff
+            WHERE user_id = ?
+        """, (user_id,)).fetchall()
+        ng_set = {int(r["staff_id"]) for r in ng_rows}
+    finally:
+        conn.close()
+
+    target_area_id = fetch_user_area_id(user_id)
+    user_profile = fetch_user_profile(user_id)
+    gender_pref = user_profile["gender_preference"]
+    graph = fetch_area_adjacency()
+
+    free_by_staff = fetch_free_slots_by_staff(date, SLOTS)
+    staff_all = fetch_staff_full()
+    staff_map = {int(s["id"]): s for s in staff_all}
+
+    candidates: List[Dict[str, Any]] = []
+
+    for sid, free_times in free_by_staff.items():
+        if sid in exclude_set:
+            continue
+        if sid in ng_set:
+            continue
+
+        staff_row = staff_map.get(sid)
+        if staff_row is None:
+            continue
+
+        staff_name = staff_row["name"]
+        staff_gender = staff_row["gender"]
+
+        for proposed_time in free_times:
+            score = 0
+            reasons: List[str] = []
+
+            diff_h = hour_diff(original_time, proposed_time)
+            tp = time_diff_points(diff_h)
+            score += tp
+            reasons.append(f"時間ずれ: {diff_h}時間 → +{tp}")
+
+            # 性別（既存ロジック踏襲）
+            if gender_pref == "any":
+                reasons.append("性別条件なし（any）")
+            elif gender_pref == "female_only":
+                if staff_gender == "F":
+                    score += 2
+                    reasons.append("性別一致（女性） +2")
+                else:
+                    score -= 2
+                    reasons.append("性別不一致（女性希望） -2")
+            elif gender_pref == "male_only":
+                if staff_gender == "M":
+                    score += 2
+                    reasons.append("性別一致（男性） +2")
+                else:
+                    score -= 2
+                    reasons.append("性別不一致（男性希望） -2")
+
+            # エリア評価（提案枠の前後で評価）
+            if target_area_id is None:
+                reasons.append("利用者エリアが不明のため移動評価なし")
+            else:
+                prev_row, next_row = fetch_prev_next_visit(sid, date, proposed_time)
+
+                prev_dist: Optional[int] = None
+                next_dist: Optional[int] = None
+
+                if prev_row is not None:
+                    prev_area_id = int(prev_row["area_id"])
+                    prev_time = prev_row["visit_time"]
+                    prev_dist = get_area_distance_bfs_cached(graph, prev_area_id, target_area_id)
+                    reasons.append(f"前の訪問({prev_time})→利用者 距離: {prev_dist if prev_dist is not None else '不明'}")
+
+                if next_row is not None:
+                    next_area_id = int(next_row["area_id"])
+                    next_time = next_row["visit_time"]
+                    next_dist = get_area_distance_bfs_cached(graph, target_area_id, next_area_id)
+                    reasons.append(f"利用者→次の訪問({next_time}) 距離: {next_dist if next_dist is not None else '不明'}")
+
+                if prev_dist is None and next_dist is None:
+                    effective_dist = None
+                    reasons.append("前後の訪問がなく移動評価なし")
+                elif prev_dist is None:
+                    effective_dist = next_dist
+                elif next_dist is None:
+                    effective_dist = prev_dist
+                else:
+                    effective_dist = max(prev_dist, next_dist)
+
+                add_points, mark = distance_to_rank_points(effective_dist)
+                score += add_points
+
+                if mark is None:
+                    reasons.append("エリア評価: なし（距離不明）")
+                elif mark in ("◎", "○", "△"):
+                    reasons.append(f"エリア評価: {mark}（距離 {effective_dist}） +{add_points}")
+                else:
+                    reasons.append(f"エリア評価: ×（距離 {effective_dist}） +0")
+
+            candidates.append({
+                "staff_id": sid,
+                "staff_name": staff_name,
+                "score": score,
+                "reasons": reasons,
+                "proposed_time": proposed_time,
+                "is_fallback": True
+            })
+
+    candidates.sort(key=lambda x: (-x["score"], x["staff_id"], x["proposed_time"]))
+    return candidates[:3]
 
 
-def parse_date(value: Optional[str]) -> str:
-    if value is None or value == "":
-        abort(400, description="date が必要です（YYYY-MM-DD）")
-    return value
+def build_candidate_cards_with_fallback(
+    user_id: int,
+    date: str,
+    time: str,
+    exclude_staff_ids: Optional[List[int]] = None
+) -> List[Dict[str, Any]]:
+    # まず同時間（今のロジック）
+    top3 = build_candidate_cards(user_id, date, time)
+    if len(top3) > 0:
+        for c in top3:
+            c["proposed_time"] = time
+            c["is_fallback"] = False
+        return top3
 
+    # 同時間が0件なら別時間を探す
+    return build_candidate_slots_fallback(
+        user_id=user_id,
+        date=date,
+        original_time=time,
+        exclude_staff_ids=exclude_staff_ids
+    )
 
-def parse_time(value: Optional[str]) -> str:
-    if value is None or value == "":
-        abort(400, description="time が必要です（HH:MM）")
-    return value
+# ----------------------------
+# Schedule view data
+# ----------------------------
+def fetch_today_schedule(date: str) -> Dict[int, Dict[str, Any]]:
+    """
+    return:
+      {
+        staff_id: {
+          "staff_name": "...",
+          "slots": { "09:00": {"user_name": "...", "area_name": "..."}, ... }
+        }
+      }
+    """
+    conn = get_conn()
+    try:
+        staff_rows = conn.execute("SELECT id, name FROM staff ORDER BY id").fetchall()
+
+        visit_rows = conn.execute("""
+            SELECT v.staff_id, v.visit_time, u.name AS user_name, a.name AS area_name
+            FROM visits v
+            JOIN users u ON u.id = v.user_id
+            JOIN areas a ON a.id = u.area_id
+            WHERE v.visit_date = ?
+        """, (date,)).fetchall()
+
+        by_staff: Dict[int, Dict[str, Any]] = {
+            int(r["id"]): {"staff_name": r["name"], "slots": {}} for r in staff_rows
+        }
+
+        for r in visit_rows:
+            sid = int(r["staff_id"])
+            t = str(r["visit_time"])
+            by_staff[sid]["slots"][t] = {"user_name": r["user_name"], "area_name": r["area_name"]}
+
+        return by_staff
+    finally:
+        conn.close()
 
 
 # ----------------------------
@@ -381,8 +653,25 @@ def parse_time(value: Optional[str]) -> str:
 # ----------------------------
 @app.route("/")
 def index():
-    return render_template("index.html")
+    # ✅ デモ用：今日/明日を固定
+    DEMO_TODAY = "2026-03-02"
+    DEMO_TOMORROW = "2026-03-03"
 
+    # dateが指定されていなければ、デフォルトはデモ今日
+    d = request.args.get("date") or DEMO_TODAY
+
+    staff = fetch_staff_simple()
+    schedule = fetch_today_schedule(d)
+
+    return render_template(
+        "index.html",
+        staff=staff,
+        schedule=schedule,
+        slots=SLOTS,
+        date=d,
+        demo_today=DEMO_TODAY,
+        demo_tomorrow=DEMO_TOMORROW,
+    )
 
 @app.route("/staff")
 def staff_list():
@@ -392,23 +681,63 @@ def staff_list():
 
 @app.route("/absent")
 def absent():
+    # 旧UIのまま残しておく（使わなくてもOK）
     staff = fetch_staff_simple()
     return render_template("absent.html", staff=staff)
 
 
 @app.route("/visits")
 def visits():
-    staff_id = parse_int(request.args.get("staff_id"), "staff_id")
-    date = parse_date(request.args.get("date"))
+    # A案：複数欠勤に対応
+    d = request.args.get("date") or today_str()
+    staff_ids_str = request.args.getlist("staff_ids")
+    if not staff_ids_str:
+        abort(400, description="欠勤者（staff_ids）が選択されていません")
 
-    visits_rows = fetch_today_visits(staff_id, date)
+    staff_ids = [int(x) for x in staff_ids_str]
+
+    # 欠勤者名（表示用）
+    staff_all = fetch_staff_simple()
+    id_to_name = {int(s["id"]): s["name"] for s in staff_all}
+    absent_names = [id_to_name.get(sid, f"ID:{sid}") for sid in staff_ids]
+
+    visits_rows = fetch_today_visits_for_absent_staff_ids(staff_ids, d)
 
     return render_template(
         "visits.html",
         visits=visits_rows,
-        staff_id=staff_id,
-        date=date,
+        absent_names=absent_names,
+        date=d,
     )
+
+
+@app.route("/result_batch", methods=["POST"])
+def result_batch():
+    d = request.form.get("date") or today_str()
+    visit_ids_str = request.form.getlist("visit_ids")
+    if not visit_ids_str:
+        abort(400, description="訪問（visit_ids）が選択されていません")
+
+    visit_ids = [int(x) for x in visit_ids_str]
+
+    results: List[Dict[str, Any]] = []
+    for vid in visit_ids:
+        v = fetch_visit_detail(vid)
+        if v is None:
+            continue
+        exclude_ids = [int(v["staff_id"])]
+        candidates = build_candidate_cards_with_fallback(
+            int(v["user_id"]),
+            str(v["visit_date"]),
+            str(v["visit_time"]),
+            exclude_staff_ids=exclude_ids
+        )
+        results.append({
+            "visit": v,
+            "candidates": candidates
+        })
+
+    return render_template("result_batch.html", results=results, date=d)
 
 
 @app.route("/result")
@@ -419,21 +748,20 @@ def result_json():
       /result?user_id=17&date=2026-03-02&time=10:00
     """
     user_id = parse_int(request.args.get("user_id"), "user_id")
-    date = parse_date(request.args.get("date"))
-    time = parse_time(request.args.get("time"))
+    d = parse_date(request.args.get("date"))
+    t = parse_time(request.args.get("time"))
 
     user_name = fetch_user_name(user_id)
-    candidates = build_candidate_cards(user_id, date, time)
+    candidates = build_candidate_cards(user_id, d, t)
 
     data = {
         "user_id": user_id,
         "user_name": user_name,
-        "date": date,
-        "time": time,
+        "date": d,
+        "time": t,
         "top3": candidates,
     }
 
-    # 日本語をそのまま表示できるようにして返す
     return Response(
         json.dumps(data, ensure_ascii=False, indent=2),
         mimetype="application/json; charset=utf-8"
@@ -451,10 +779,10 @@ def staff_adjust_placeholder():
 @app.route("/debug_prev_next")
 def debug_prev_next():
     staff_id = parse_int(request.args.get("staff_id"), "staff_id")
-    date = parse_date(request.args.get("date"))
-    time = parse_time(request.args.get("time"))
+    d = parse_date(request.args.get("date"))
+    t = parse_time(request.args.get("time"))
 
-    prev_row, next_row = fetch_prev_next_visit(staff_id, date, time)
+    prev_row, next_row = fetch_prev_next_visit(staff_id, d, t)
 
     def row_to_dict(row: Optional[sqlite3.Row]) -> Optional[Dict[str, Any]]:
         if row is None:
@@ -463,8 +791,8 @@ def debug_prev_next():
 
     return {
         "staff_id": staff_id,
-        "date": date,
-        "time": time,
+        "date": d,
+        "time": t,
         "prev": row_to_dict(prev_row),
         "next": row_to_dict(next_row),
     }
@@ -488,14 +816,14 @@ def debug_distance():
 @app.route("/debug_candidates")
 def debug_candidates():
     user_id = parse_int(request.args.get("user_id"), "user_id")
-    date = parse_date(request.args.get("date"))
-    time = parse_time(request.args.get("time"))
+    d = parse_date(request.args.get("date"))
+    t = parse_time(request.args.get("time"))
 
-    candidates = build_candidate_cards(user_id, date, time)
+    candidates = build_candidate_cards(user_id, d, t)
     return {
         "user_id": user_id,
-        "date": date,
-        "time": time,
+        "date": d,
+        "time": t,
         "candidates": candidates
     }
 
