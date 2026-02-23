@@ -2,31 +2,120 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>訪問振替支援アプリ</title>
+  <title>FairShift</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .schedule-table th, .schedule-table td { font-size: 12px; padding: 6px; vertical-align: middle; }
+    .slot-empty { background: #fff; }
+    .slot-filled { background: #f8f9fa; }
+    .sticky-left { position: sticky; left: 0; background: #fff; z-index: 2; }
+    .sticky-top { position: sticky; top: 0; z-index: 3; }
+  </style>
 </head>
 <body class="bg-light">
-  <div class="container py-5">
+  <div class="container py-4">
 
-    <div class="text-center mb-5">
-      <h1 class="fw-bold">訪問振替支援アプリ</h1>
-      <p class="text-muted">急な欠勤時の振替候補を自動表示します</p>
+    <div class="text-center mb-4">
+      <h1 class="fw-bold mb-1">FairShift</h1>
+      <p class="text-muted mb-0">急な欠勤時の振替候補を見える化します</p>
     </div>
 
-    <div class="d-grid gap-3 col-6 mx-auto mb-4">
-      <a href="/absent" class="btn btn-primary btn-lg">振替を開始する</a>
-      <a href="/staff" class="btn btn-outline-secondary">スタッフ一覧</a>
-    </div>
-
-    <hr>
-
-    <div class="card mt-4">
-      <div class="card-header">
-        スタッフ減点（後で実装）
-      </div>
+    <div class="card mb-4">
+      <div class="card-header fw-bold">① 欠勤者を選択（複数OK）</div>
       <div class="card-body">
-        <p class="mb-2">※MVPでは未実装（Day4以降の拡張予定）</p>
-        <a href="/staff_adjust" class="btn btn-outline-danger">減点設定（仮）</a>
+        <form method="GET" action="/visits" class="row g-3">
+          <div class="col-12">
+            <div class="fw-semibold mb-2">対象日</div>
+            
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+              
+              <!-- 今日 -->
+               <a class="btn btn-outline-primary"
+                  href="/?date={{ demo_today }}">今日</a>
+              
+              <!-- 明日 -->
+               <a class="btn btn-outline-primary"
+                  href="/?date={{ demo_tomorrow }}">明日</a>
+              
+              <!-- 日付を選択 -->
+              <div class="d-flex align-items-center gap-2">
+                <span class="text-muted">日付を選択：</span>
+                <input type="date"
+                       class="form-control"
+                       style="max-width:200px;"
+                       value="{{ date }}"
+                       onchange="location.href='/?date=' + this.value">
+              </div>
+              
+              <span class="text-muted small">（表示中：{{ date }}）</span>
+            </div>
+            
+            <!-- visitsへ渡す用 -->
+            <input type="hidden" name="date" value="{{ date }}">
+             
+            <div class="form-text mt-2">
+              ※今日/明日/日付選択で上のスケジュールが切り替わります
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="d-flex flex-wrap gap-3">
+              {% for s in staff %}
+                <label class="form-check-label">
+                  <input class="form-check-input me-1" type="checkbox" name="staff_ids" value="{{ s.id }}">
+                  {{ s.name }}
+                </label>
+              {% endfor %}
+            </div>
+            <div class="form-text mt-2">
+              今日の日付：{{ date }}（必要なら /visits?date=YYYY-MM-DD で変更できます）
+            </div>
+          </div>
+
+          <div class="col-12 d-flex gap-2">
+            <button type="submit" class="btn btn-primary">訪問予定を確認する</button>
+            <a href="/staff" class="btn btn-outline-secondary">スタッフ一覧</a>
+            <a href="/absent" class="btn btn-outline-secondary">旧：欠勤者選択</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header fw-bold">② 今日のスケジュール（9:00〜18:00）</div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-bordered schedule-table mb-0">
+            <thead>
+              <tr>
+                <th class="sticky-top sticky-left">時間</th>
+                {% for sid, info in schedule.items() %}
+                  <th class="sticky-top text-center">{{ info.staff_name }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for t in slots %}
+              <tr>
+                <th class="sticky-left">{{ t }}</th>
+                {% for sid, info in schedule.items() %}
+                  {% set val = info.slots.get(t) %}
+                  <td class="{{ 'slot-filled' if val else 'slot-empty' }}">
+                    {% if val %}
+                      <div class="fw-semibold">{{ val.user_name }}</div>
+                      <div class="text-muted small">{{ val.area_name }}</div>
+                    {% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="text-muted small mt-2">
+          ※まずは「予定が取れているか」の見える化が目的です（発表でも強い）
+        </div>
       </div>
     </div>
 
