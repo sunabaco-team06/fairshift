@@ -100,10 +100,29 @@
                 <th class="sticky-left">{{ t }}</th>
                 {% for sid, info in schedule.items() %}
                   {% set val = info.slots.get(t) %}
-                  <td class="{{ 'slot-filled' if val else 'slot-empty' }}">
+                  <td class="
+                    {{ 'slot-filled' if val else 'slot-empty' }}
+                    {% if val and val.is_reassigned_visit %} table-success {% endif %}
+                    {% if val and val.is_original_reassigned %} table-secondary {% endif %}
+                  ">
                     {% if val %}
-                      <div class="fw-semibold">{{ val.user_name }}</div>
+                      <div class="d-flex align-items-center gap-2">
+                        <div class="fw-semibold">{{ val.user_name }}</div>
+                        
+                        {% if val.is_original_reassigned %}
+                          <span class="badge bg-secondary">✓振替済</span>
+                        {% endif %}
+                        
+                        {% if val.is_reassigned_visit %}
+                          <span class="badge bg-success">振替</span>
+                        {% endif %}
+                      </div>
+                      
                       <div class="text-muted small">{{ val.area_name }}</div>
+                      
+                      {% if val.is_reassigned_visit %}
+                        <div class="small mt-1">元：{{ val.orig_staff_name }} {{ val.orig_time }}</div>
+                      {% endif %}
                     {% endif %}
                   </td>
                 {% endfor %}

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, abort, Response
+from flask import Flask, render_template, request, abort, Response, redirect, url_for
 import json
 import sqlite3
 from pathlib import Path
@@ -9,10 +9,10 @@ from datetime import date as dt_date
 app = Flask(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "fairshift.db"
+DB_PATH = BASE_DIR / "fairshift_test.db"
 
 # スケジュール表示の時間枠（前提：1時間枠）
-SLOTS = [f"{h:02d}:00" for h in range(9, 19)]  # 09:00〜18:00
+SLOTS = [f"{h:02d}:00" for h in range(9, 19) if h != 12]
 
 
 # ----------------------------
@@ -24,6 +24,51 @@ def get_conn() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
+def insert_visit(staff_id: int, user_id: int, visit_date: str, visit_time: str, status: str = "planned") -> int:
+    """visitsに1件追加して new_visit_id を返す"""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO visits (staff_id, user_id, visit_date, visit_time, status)
+            VALUES (?, ?, ?, ?, ?)
+        """, (staff_id, user_id, visit_date, visit_time, status))
+        conn.commit()
+        return int(cur.lastrowid)
+    finally:
+        conn.close()
+
+
+def insert_reassignment(original_visit_id: int, new_visit_id: int) -> int:
+    """reassignmentsに1件追加して id を返す"""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO reassignments (original_visit_id, new_visit_id, status)
+            VALUES (?, ?, 'active')
+        """, (original_visit_id, new_visit_id))
+        conn.commit()
+        return int(cur.lastrowid)
+    finally:
+        conn.close()
+
+
+def visit_exists(staff_id: int, visit_date: str, visit_time: str) -> bool:
+    """同一スタッフ×同日×同時刻の訪問がすでにあるか（衝突チェック）"""
+    conn = get_conn()
+    try:
+        row = conn.execute("""
+            SELECT 1
+            FROM visits
+            WHERE staff_id = ?
+              AND visit_date = ?
+              AND visit_time = ?
+            LIMIT 1
+        """, (staff_id, visit_date, visit_time)).fetchone()
+        return row is not None
+    finally:
+        conn.close()
 
 # ----------------------------
 # Helper functions
@@ -51,6 +96,26 @@ def parse_time(value: Optional[str]) -> str:
     if value is None or value == "":
         abort(400, description="time が必要です（HH:MM）")
     return value
+
+def role_points(role_required: str, staff_role: str) -> Tuple[int, str]:
+    """
+    users.role_required: any / pt_only / ot_only
+    staff.role: pt / ot
+    """
+    if role_required == "any":
+        return 0, "職種条件なし（any）"
+
+    if role_required == "pt_only":
+        if staff_role == "pt":
+            return 2, "職種一致（PT希望） +2"
+        return -2, "職種不一致（PT希望） -2"
+
+    if role_required == "ot_only":
+        if staff_role == "ot":
+            return 2, "職種一致（OT希望） +2"
+        return -2, "職種不一致（OT希望） -2"
+
+    return 0, f"職種条件不明（{role_required}）"
 
 def time_to_minutes(t: str) -> int:
     # "09:00" -> 540
@@ -90,6 +155,59 @@ def fetch_staff_simple() -> List[sqlite3.Row]:
         return conn.execute("SELECT id, name FROM staff ORDER BY id").fetchall()
     finally:
         conn.close()
+
+
+def fetch_today_schedule(date: str) -> Dict[int, Dict[str, Any]]:
+    """
+    index.html 用：各枠 val を必ず dict にする
+    schedule = {
+      staff_id: {
+        "staff_name": "...",
+        "slots": {
+          "09:00": {
+            "visit_id": 1,
+            "user_name": "...",
+            "area_name": "...",
+            "is_original_reassigned": False,
+            "is_reassigned_visit": False,
+            "orig_staff_name": None,
+            "orig_time": None,
+          },
+          ...
+        }
+      }
+    }
+    """
+    staff_rows = fetch_staff_simple()
+
+    schedule: Dict[int, Dict[str, Any]] = {}
+    for s in staff_rows:
+        sid = int(s["id"])
+        schedule[sid] = {
+            "staff_name": str(s["name"]),
+            "slots": {}
+        }
+
+    # staffごとに visit を入れる（val は dict に変換して格納）
+    for s in staff_rows:
+        sid = int(s["id"])
+        visits = fetch_today_visits(sid, date)
+        for r in visits:
+            t = str(r["visit_time"])
+            schedule[sid]["slots"][t] = {
+                "visit_id": int(r["id"]),            # ← ここがキー
+                "user_id": int(r["user_id"]),
+                "user_name": str(r["user_name"]),
+                "area_name": str(r["area_name"]),
+                "user_area_id": int(r["user_area_id"]),
+                # 振替表示用フラグ（index() で埋める）
+                "is_original_reassigned": False,
+                "is_reassigned_visit": False,
+                "orig_staff_name": None,
+                "orig_time": None,
+            }
+
+    return schedule
 
 
 def fetch_today_visits(staff_id: int, date: str) -> List[sqlite3.Row]:
@@ -160,6 +278,48 @@ def fetch_visit_detail(visit_id: int) -> Optional[sqlite3.Row]:
     finally:
         conn.close()
 
+
+def fetch_active_reassignments_by_date(date: str):
+    """
+    その日(date)の active な振替リンクを取る
+    戻り:
+      orig_to_new: {original_visit_id: {...new情報...}}
+      new_to_orig: {new_visit_id: {...orig情報...}}
+    """
+    conn = get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT
+              r.original_visit_id,
+              r.new_visit_id,
+              ov.visit_time AS orig_time,
+              os.name       AS orig_staff_name
+            FROM reassignments r
+            JOIN visits ov ON ov.id = r.original_visit_id
+            JOIN staff os  ON os.id = ov.staff_id
+            WHERE r.status = 'active'
+              AND ov.visit_date = ?
+        """, (date,)).fetchall()
+
+        orig_to_new = {}
+        new_to_orig = {}
+
+        for row in rows:
+            original_id = int(row["original_visit_id"])
+            new_id = int(row["new_visit_id"])
+
+            orig_to_new[original_id] = {"new_visit_id": new_id}
+            new_to_orig[new_id] = {
+                "original_visit_id": original_id,
+                "orig_staff_name": str(row["orig_staff_name"]),
+                "orig_time": str(row["orig_time"]),
+            }
+
+        return orig_to_new, new_to_orig
+    finally:
+        conn.close()
+
+
 def fetch_busy_times_for_staff(date: str) -> Dict[int, set]:
     """
     { staff_id: {"09:00","10:00",...} } を返す
@@ -214,14 +374,13 @@ def fetch_user_profile(user_id: int) -> sqlite3.Row:
     conn = get_conn()
     try:
         row = conn.execute("""
-            SELECT id, area_id, gender_preference
+            SELECT id, area_id, gender_preference, role_required
             FROM users
             WHERE id = ?
         """, (user_id,)).fetchone()
         return row
     finally:
         conn.close()
-
 
 def fetch_user_name(user_id: int) -> Optional[str]:
     conn = get_conn()
@@ -248,7 +407,7 @@ def fetch_candidate_staff_raw(user_id: int, date: str, time: str) -> List[sqlite
     conn = get_conn()
     try:
         return conn.execute("""
-            SELECT s.id, s.name, s.gender
+            SELECT s.id, s.name, s.gender, s.role
             FROM staff s
             WHERE s.id NOT IN (
                 SELECT staff_id
@@ -297,6 +456,21 @@ def fetch_prev_next_visit(
         """, (staff_id, date, time)).fetchone()
 
         return prev_row, next_row
+    finally:
+        conn.close()
+
+
+def has_active_reassignment_for_original(original_visit_id: int) -> bool:
+    conn = get_conn()
+    try:
+        row = conn.execute("""
+            SELECT 1
+            FROM reassignments
+            WHERE original_visit_id = ?
+              AND status = 'active'
+            LIMIT 1
+        """, (original_visit_id,)).fetchone()
+        return row is not None
     finally:
         conn.close()
 
@@ -370,6 +544,7 @@ def build_candidate_cards(user_id: int, date: str, time: str) -> List[Dict[str, 
     target_area_id = fetch_user_area_id(user_id)
     user_profile = fetch_user_profile(user_id)
     gender_pref = user_profile["gender_preference"]
+    role_required = str(user_profile["role_required"])
 
     graph = fetch_area_adjacency()
     candidates: List[Dict[str, Any]] = []
@@ -384,6 +559,11 @@ def build_candidate_cards(user_id: int, date: str, time: str) -> List[Dict[str, 
             "同時間帯の予定なし",
             "NGスタッフではない",
         ]
+
+        staff_role = str(r["role"])
+        rp, rtxt = role_points(role_required, staff_role)
+        score += rp
+        reasons.append(rtxt)
 
         # gender適合（減点方式）
         if gender_pref == "any":
@@ -485,6 +665,7 @@ def build_candidate_slots_fallback(
     target_area_id = fetch_user_area_id(user_id)
     user_profile = fetch_user_profile(user_id)
     gender_pref = user_profile["gender_preference"]
+    role_required = str(user_profile["role_required"])
     graph = fetch_area_adjacency()
 
     free_by_staff = fetch_free_slots_by_staff(date, SLOTS)
@@ -509,6 +690,11 @@ def build_candidate_slots_fallback(
         for proposed_time in free_times:
             score = 0
             reasons: List[str] = []
+
+            staff_role = str(staff_row["role"])
+            rp, rtxt = role_points(role_required, staff_role)
+            score += rp
+            reasons.append(rtxt)
 
             diff_h = hour_diff(original_time, proposed_time)
             tp = time_diff_points(diff_h)
@@ -609,69 +795,63 @@ def build_candidate_cards_with_fallback(
         exclude_staff_ids=exclude_staff_ids
     )
 
-# ----------------------------
-# Schedule view data
-# ----------------------------
-def fetch_today_schedule(date: str) -> Dict[int, Dict[str, Any]]:
-    """
-    return:
-      {
-        staff_id: {
-          "staff_name": "...",
-          "slots": { "09:00": {"user_name": "...", "area_name": "..."}, ... }
-        }
-      }
-    """
-    conn = get_conn()
-    try:
-        staff_rows = conn.execute("SELECT id, name FROM staff ORDER BY id").fetchall()
-
-        visit_rows = conn.execute("""
-            SELECT v.staff_id, v.visit_time, u.name AS user_name, a.name AS area_name
-            FROM visits v
-            JOIN users u ON u.id = v.user_id
-            JOIN areas a ON a.id = u.area_id
-            WHERE v.visit_date = ?
-        """, (date,)).fetchall()
-
-        by_staff: Dict[int, Dict[str, Any]] = {
-            int(r["id"]): {"staff_name": r["name"], "slots": {}} for r in staff_rows
-        }
-
-        for r in visit_rows:
-            sid = int(r["staff_id"])
-            t = str(r["visit_time"])
-            by_staff[sid]["slots"][t] = {"user_name": r["user_name"], "area_name": r["area_name"]}
-
-        return by_staff
-    finally:
-        conn.close()
-
 
 # ----------------------------
 # Routes
 # ----------------------------
 @app.route("/")
 def index():
-    # ✅ デモ用：今日/明日を固定
     DEMO_TODAY = "2026-03-02"
     DEMO_TOMORROW = "2026-03-03"
 
-    # dateが指定されていなければ、デフォルトはデモ今日
     d = request.args.get("date") or DEMO_TODAY
 
     staff = fetch_staff_simple()
     schedule = fetch_today_schedule(d)
 
+    orig_to_new, new_to_orig = fetch_active_reassignments_by_date(d)
+
+    # schedule の各枠に振替フラグを付与（Rowでもdict化して確実に書き込む）
+    for sid, info in schedule.items():
+        slots_dict = info.get("slots", {})
+        for t, val in list(slots_dict.items()):
+            if not val:
+                continue
+
+            if not isinstance(val, dict):
+                try:
+                    val = dict(val)
+                    slots_dict[t] = val
+                except Exception:
+                    continue
+
+            vid = val.get("visit_id")
+            if vid is None:
+                vid = val.get("id")
+            if vid is None:
+                continue
+            vid = int(vid)
+
+            if vid in orig_to_new:
+                val["is_original_reassigned"] = True
+
+            if vid in new_to_orig:
+                val["is_reassigned_visit"] = True
+                val["orig_staff_name"] = new_to_orig[vid]["orig_staff_name"]
+                val["orig_time"] = new_to_orig[vid]["orig_time"]
+
+            # 以後の統一のため
+            val["visit_id"] = vid
+
     return render_template(
-        "index.html",
-        staff=staff,
-        schedule=schedule,
-        slots=SLOTS,
-        date=d,
-        demo_today=DEMO_TODAY,
-        demo_tomorrow=DEMO_TOMORROW,
-    )
+    "index.html",
+    staff=staff,
+    schedule=schedule,
+    slots=SLOTS,
+    date=d,
+    demo_today=DEMO_TODAY,
+    demo_tomorrow=DEMO_TOMORROW,
+)
 
 @app.route("/staff")
 def staff_list():
@@ -703,9 +883,17 @@ def visits():
 
     visits_rows = fetch_today_visits_for_absent_staff_ids(staff_ids, d)
 
+    # ✅ 追加：振替済みの元枠は UI 上で選択不可にする
+    visits_list: List[Dict[str, Any]] = []
+    for v in visits_rows:
+        dv = dict(v)  # sqlite3.Row → dict
+        vid = int(dv["id"])
+        dv["is_already_reassigned"] = has_active_reassignment_for_original(vid)
+        visits_list.append(dv)
+
     return render_template(
         "visits.html",
-        visits=visits_rows,
+        visits=visits_list,
         absent_names=absent_names,
         date=d,
     )
@@ -739,6 +927,89 @@ def result_batch():
 
     return render_template("result_batch.html", results=results, date=d)
 
+@app.route("/confirm_batch", methods=["POST"])
+def confirm_batch():
+    date = request.form.get("date") or today_str()
+
+    # result_batch.html から送られてくる元訪問ID一覧
+    original_ids = request.form.getlist("original_visit_ids")
+    if not original_ids:
+        abort(400, description="確定対象の訪問がありません")
+
+    # まとめてエラーを出したいので、衝突があれば集める
+    conflicts = []
+
+    for vid_str in original_ids:
+        try:
+            original_visit_id = int(vid_str)
+        except ValueError:
+            continue
+
+        # choice_<visit_id> を読む（候補0件のvisitはchoiceが無い）
+        choice_key = f"choice_{original_visit_id}"
+        choice_val = request.form.get(choice_key)
+        if not choice_val:
+            # 候補0件など：スキップ
+            continue
+
+        # "staff_id|proposed_time"
+        try:
+            staff_id_str, proposed_time = choice_val.split("|", 1)
+            new_staff_id = int(staff_id_str)
+            proposed_time = str(proposed_time)
+        except Exception:
+            abort(400, description=f"選択データが不正です: {choice_val}")
+
+        v = fetch_visit_detail(original_visit_id)
+        # ✅ すでに振替済の元枠なら弾く
+        if has_active_reassignment_for_original(original_visit_id):
+            conflicts.append(
+                f"訪問ID {original_visit_id} は既に振替済です（重複振替はできません）"
+            )
+            continue
+
+        if v is None:
+            continue
+
+        user_id = int(v["user_id"])
+        visit_date = str(v["visit_date"])
+
+        # 念のため、フォームのdateとDBのvisit_dateがズレてたらDB側を優先
+        # （result_batchはその日のvisitを出してるはずなので）
+        if visit_exists(new_staff_id, visit_date, proposed_time):
+            conflicts.append(
+                f"スタッフID {new_staff_id} の {visit_date} {proposed_time} は既に予定があります"
+            )
+            continue
+
+        # 1) 新しい visit を追加（振替なので status='reassigned'）
+        try:
+            new_visit_id = insert_visit(
+                staff_id=new_staff_id,
+                user_id=user_id,
+                visit_date=visit_date,
+                visit_time=proposed_time,
+                status="reassigned"
+            )
+        except sqlite3.IntegrityError:
+            conflicts.append(
+                f"スタッフID {new_staff_id} の {visit_date} {proposed_time} は既に予定があります（UNIQUE制約）"
+            )
+            continue
+
+        # 2) reassignments に紐付けを追加
+        insert_reassignment(original_visit_id=original_visit_id, new_visit_id=new_visit_id)
+
+    if conflicts:
+        # まずはシンプルにエラー表示（次の段階でおしゃれにしてOK）
+        return (
+            "<h2>振替確定できない枠がありました</h2>"
+            + "<ul>" + "".join([f"<li>{c}</li>" for c in conflicts]) + "</ul>"
+            + f'<p><a href="/">トップへ戻る</a>（または戻って選び直してね）</p>'
+        ), 409
+
+    # いったんトップへ戻す（後で /schedule に変える）
+    return redirect(url_for("index", date=date))
 
 @app.route("/result")
 def result_json():

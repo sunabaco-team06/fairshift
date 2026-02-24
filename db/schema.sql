@@ -3,6 +3,7 @@ PRAGMA foreign_keys = ON;
 -- =========================
 -- DROP（作り直し用）
 -- =========================
+DROP TABLE IF EXISTS reassignments;
 DROP TABLE IF EXISTS user_ng_staff;
 DROP TABLE IF EXISTS staff_unavailable;
 DROP TABLE IF EXISTS visits;
@@ -88,4 +89,16 @@ CREATE TABLE user_ng_staff (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE,
   UNIQUE (user_id, staff_id)
+);
+
+-- reassignments（振替履歴）
+CREATE TABLE reassignments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  original_visit_id INTEGER NOT NULL,
+  new_visit_id INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','canceled')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (original_visit_id) REFERENCES visits(id) ON DELETE CASCADE,
+  FOREIGN KEY (new_visit_id) REFERENCES visits(id) ON DELETE CASCADE,
+  UNIQUE (original_visit_id, new_visit_id)
 );
