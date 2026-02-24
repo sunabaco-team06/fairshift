@@ -44,11 +44,21 @@
                 </thead>
                 <tbody>
                   {% for v in visits %}
-                  <tr>
+                  <tr class="{% if v.is_already_reassigned %}table-secondary{% endif %}">
                     <td class="text-center">
-                      <input type="checkbox" name="visit_ids" value="{{ v.id }}">
+                      <input type="checkbox"
+                             name="visit_ids"
+                             value="{{ v.id }}"
+                             {% if v.is_already_reassigned %}disabled{% endif %}>
                     </td>
-                    <td>{{ v.visit_time }}</td>
+
+                    <td>
+                      {{ v.visit_time }}
+                      {% if v.is_already_reassigned %}
+                        <span class="badge bg-secondary ms-2">✓振替済</span>
+                      {% endif %}
+                    </td>
+
                     <td>{{ v.user_name }}</td>
                     <td>{{ v.area_name }}</td>
                     <td>{{ v.staff_name }}</td>
@@ -64,7 +74,7 @@
             </div>
 
             <div class="text-muted small mt-2">
-              ※ここで複数選ぶ → 次の画面で「訪問ごとに上位3名」を確認できます
+              ※振替済みの訪問は選択できません（UI・サーバ両方で制御しています）
             </div>
           </form>
         {% endif %}
