@@ -66,6 +66,30 @@ INSERT INTO "staff" VALUES(5,'五松','F','ot','2026-02-20 10:50:29');
 INSERT INTO "staff" VALUES(6,'六井','F','pt','2026-02-20 10:50:29');
 INSERT INTO "staff" VALUES(7,'七川','M','pt','2026-02-20 10:50:29');
 
+INSERT INTO staff_unavailable(staff_id,date,time,reason)
+VALUES
+(1,'2026-03-06','09:00','meeting'),
+(2,'2026-03-06','09:00','meeting'),
+(3,'2026-03-06','09:00','meeting'),
+(4,'2026-03-06','09:00','meeting'),
+(5,'2026-03-06','09:00','meeting'),
+(6,'2026-03-06','09:00','meeting'),
+(7,'2026-03-06','09:00','meeting'),
+(1,'2026-03-04','15:00','meeting'),
+(1,'2026-03-04','16:00','meeting'),
+(4,'2026-03-04','09:00','meeting'),
+(5,'2026-03-04','09:00','meeting');
+
+INSERT INTO user_ng_staff(user_id,staff_id,reason)
+VALUES
+(69,1,'ng'),
+(15,2,'ng'),
+(55,3,'ng'),
+(68,4,'ng'),
+(87,5,'ng'),
+(119,6,'ng'),
+(79,7,'ng');
+
 INSERT INTO "users" VALUES(1,'山田1',1,'any','any','today_required','2026-02-20 12:40:54');
 INSERT INTO "users" VALUES(2,'佐藤2',1,'any','any','today_required','2026-02-20 12:40:54');
 INSERT INTO "users" VALUES(3,'鈴木3',1,'any','any','today_required','2026-02-20 12:40:54');
@@ -217,19 +241,22 @@ INSERT INTO "users" VALUES(148,'小山148',12,'any','any','tomorrow_ok','2026-02
 INSERT INTO "users" VALUES(149,'浅田149',12,'female_only','pt_only','week_ok','2026-02-20 12:40:54');
 INSERT INTO "users" VALUES(150,'横尾150',12,'male_only','any','today_required','2026-02-20 12:40:54');
 
+
+
 -- 一野（4件）
 INSERT INTO visits (staff_id,user_id,visit_date,visit_time) VALUES (1,12,'2026-03-02','10:00');
 INSERT INTO visits (staff_id,user_id,visit_date,visit_time) VALUES (1,25,'2026-03-02','11:00');
-INSERT INTO visits (staff_id,user_id,visit_date,visit_time) VALUES (1,41,'2026-03-02','14:00');
-INSERT INTO visits (staff_id,user_id,visit_date,visit_time) VALUES (1,53,'2026-03-02','15:00');
+INSERT INTO visits (staff_id,user_id,visit_date,visit_time) VALUES (1,1,'2026-03-02','15:00');
+INSERT INTO visits (staff_id,user_id,visit_date,visit_time) VALUES (1,22,'2026-03-02','16:00');
 
--- 二村（6件）
+-- 二村（7件）
 INSERT INTO visits VALUES (NULL,2,63,'2026-03-02','09:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,64,'2026-03-02','10:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,65,'2026-03-02','11:00','planned',datetime('now'));
-INSERT INTO visits VALUES (NULL,2,78,'2026-03-02','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,79,'2026-03-02','14:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,2,10,'2026-03-02','15:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,80,'2026-03-02','16:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,2,113,'2026-03-02','17:00','planned',datetime('now'));
 
 -- 三見（6件）
 INSERT INTO visits VALUES (NULL,3,17,'2026-03-02','10:00','planned',datetime('now'));
@@ -251,7 +278,7 @@ INSERT INTO visits VALUES (NULL,4,44,'2026-03-02','16:00','planned',datetime('no
 INSERT INTO visits VALUES (NULL,5,50,'2026-03-02','10:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,51,'2026-03-02','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,52,'2026-03-02','13:00','planned',datetime('now'));
-INSERT INTO visits VALUES (NULL,5,53,'2026-03-02','14:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,5,150,'2026-03-02','14:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,54,'2026-03-02','15:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,55,'2026-03-02','17:00','planned',datetime('now'));
 
@@ -282,7 +309,7 @@ INSERT INTO visits VALUES (NULL,2,119,'2026-03-03','09:00','planned',datetime('n
 INSERT INTO visits VALUES (NULL,2,120,'2026-03-03','10:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,121,'2026-03-03','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,24,'2026-03-03','13:00','planned',datetime('now'));
-INSERT INTO visits VALUES (NULL,2,25,'2026-03-03','14:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,2,6,'2026-03-03','15:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,26,'2026-03-03','16:00','planned',datetime('now'));
 
 -- 三見（6件）
@@ -306,22 +333,24 @@ INSERT INTO visits VALUES (NULL,5,68,'2026-03-03','10:00','planned',datetime('no
 INSERT INTO visits VALUES (NULL,5,69,'2026-03-03','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,70,'2026-03-03','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,71,'2026-03-03','14:00','planned',datetime('now'));
-INSERT INTO visits VALUES (NULL,5,72,'2026-03-03','15:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,5,7,'2026-03-03','16:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,73,'2026-03-03','17:00','planned',datetime('now'));
 
--- 六井（5件）
+-- 六井（6件）
 INSERT INTO visits VALUES (NULL,6,81,'2026-03-03','09:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,6,82,'2026-03-03','10:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,6,83,'2026-03-03','11:00','planned',datetime('now'));
-INSERT INTO visits VALUES (NULL,6,84,'2026-03-03','13:00','planned',datetime('now'));
-INSERT INTO visits VALUES (NULL,6,85,'2026-03-03','14:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,6,2,'2026-03-03','13:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,6,107,'2026-03-03','14:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,6,9,'2026-03-03','16:00','planned',datetime('now'));
 
--- 七川（5件）
+-- 七川（6件）
 INSERT INTO visits VALUES (NULL,7,90,'2026-03-03','10:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,7,91,'2026-03-03','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,7,92,'2026-03-03','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,7,93,'2026-03-03','14:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,7,94,'2026-03-03','16:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,7,11,'2026-03-03','17:00','planned',datetime('now'));
 
 -- 一野（4件）
 INSERT INTO visits VALUES (NULL,1,117,'2026-03-04','10:00','planned',datetime('now'));
@@ -330,7 +359,7 @@ INSERT INTO visits VALUES (NULL,1,142,'2026-03-04','13:00','planned',datetime('n
 INSERT INTO visits VALUES (NULL,1,30,'2026-03-04','14:00','planned',datetime('now'));
 
 -- 二村（6件）
-INSERT INTO visits VALUES (NULL,2,118,'2026-03-04','10:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,2,111,'2026-03-04','10:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,143,'2026-03-04','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,44,'2026-03-04','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,45,'2026-03-04','14:00','planned',datetime('now'));
@@ -338,15 +367,15 @@ INSERT INTO visits VALUES (NULL,2,46,'2026-03-04','15:00','planned',datetime('no
 INSERT INTO visits VALUES (NULL,2,47,'2026-03-04','16:00','planned',datetime('now'));
 
 -- 三見（6件）
-INSERT INTO visits VALUES (NULL,3,119,'2026-03-04','09:00','planned',datetime('now'));
-INSERT INTO visits VALUES (NULL,3,141,'2026-03-04','10:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,3,20,'2026-03-04','09:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,3,16,'2026-03-04','10:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,3,48,'2026-03-04','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,3,49,'2026-03-04','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,3,50,'2026-03-04','14:00','planned',datetime('now'));
-INSERT INTO visits VALUES (NULL,3,51,'2026-03-04','15:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,3,8,'2026-03-04','16:00','planned',datetime('now'));
 
 -- 四賀（6件）
-INSERT INTO visits VALUES (NULL,4,120,'2026-03-04','10:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,4,21,'2026-03-04','10:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,4,144,'2026-03-04','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,4,60,'2026-03-04','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,4,61,'2026-03-04','14:00','planned',datetime('now'));
@@ -354,7 +383,7 @@ INSERT INTO visits VALUES (NULL,4,62,'2026-03-04','15:00','planned',datetime('no
 INSERT INTO visits VALUES (NULL,4,63,'2026-03-04','17:00','planned',datetime('now'));
 
 -- 五松（6件）
-INSERT INTO visits VALUES (NULL,5,121,'2026-03-04','10:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,5,4,'2026-03-04','10:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,145,'2026-03-04','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,74,'2026-03-04','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,75,'2026-03-04','14:00','planned',datetime('now'));
@@ -382,26 +411,31 @@ INSERT INTO visits VALUES (NULL,1,134,'2026-03-05','11:00','planned',datetime('n
 INSERT INTO visits VALUES (NULL,1,148,'2026-03-05','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,1,31,'2026-03-05','14:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,1,78,'2026-03-05','15:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,1,135,'2026-03-05','17:00','planned',datetime('now'));
 
 -- 二村（6件）
 INSERT INTO visits VALUES (NULL,2,118,'2026-03-05','09:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,120,'2026-03-05','10:00','planned',datetime('now'));
-INSERT INTO visits VALUES (NULL,2,122,'2026-03-05','11:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,2,90,'2026-03-05','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,32,'2026-03-05','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,33,'2026-03-05','14:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,2,13,'2026-03-05','15:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,34,'2026-03-05','16:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,2,58,'2026-03-05','17:00','planned',datetime('now'));
 
 -- 三見（6件）
+INSERT INTO visits VALUES (NULL,3,15,'2026-03-05','09:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,3,121,'2026-03-05','10:00','planned',datetime('now'));
-INSERT INTO visits VALUES (NULL,3,123,'2026-03-05','11:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,3,138,'2026-03-05','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,3,35,'2026-03-05','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,3,36,'2026-03-05','14:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,3,37,'2026-03-05','15:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,3,38,'2026-03-05','17:00','planned',datetime('now'));
 
 -- 四賀（6件）
+INSERT INTO visits VALUES (NULL,4,110,'2026-03-05','09:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,4,124,'2026-03-05','10:00','planned',datetime('now'));
-INSERT INTO visits VALUES (NULL,4,125,'2026-03-05','11:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,4,109,'2026-03-05','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,4,64,'2026-03-05','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,4,65,'2026-03-05','14:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,4,66,'2026-03-05','15:00','planned',datetime('now'));
@@ -414,20 +448,26 @@ INSERT INTO visits VALUES (NULL,5,79,'2026-03-05','13:00','planned',datetime('no
 INSERT INTO visits VALUES (NULL,5,80,'2026-03-05','14:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,81,'2026-03-05','15:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,82,'2026-03-05','16:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,5,14,'2026-03-05','17:00','planned',datetime('now'));
 
 -- 六井（5件）
 INSERT INTO visits VALUES (NULL,6,128,'2026-03-05','09:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,6,129,'2026-03-05','10:00','planned',datetime('now'));
-INSERT INTO visits VALUES (NULL,6,83,'2026-03-05','11:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,6,19,'2026-03-05','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,6,84,'2026-03-05','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,6,85,'2026-03-05','14:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,6,138,'2026-03-05','15:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,6,114,'2026-03-05','16:00','planned',datetime('now'));
 
 -- 七川（5件）
+INSERT INTO visits VALUES (NULL,7,27,'2026-03-05','09:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,7,130,'2026-03-05','10:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,7,131,'2026-03-05','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,7,99,'2026-03-05','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,7,100,'2026-03-05','14:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,7,149,'2026-03-05','15:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,7,101,'2026-03-05','16:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,7,137,'2026-03-05','17:00','planned',datetime('now'));
 
 -- 一野（5件）
 INSERT INTO visits VALUES (NULL,1,119,'2026-03-06','10:00','planned',datetime('now'));
@@ -437,12 +477,12 @@ INSERT INTO visits VALUES (NULL,1,41,'2026-03-06','14:00','planned',datetime('no
 INSERT INTO visits VALUES (NULL,1,102,'2026-03-06','15:00','planned',datetime('now'));
 
 -- 二村（6件）
-INSERT INTO visits VALUES (NULL,2,120,'2026-03-06','09:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,141,'2026-03-06','10:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,42,'2026-03-06','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,43,'2026-03-06','13:00','planned',datetime('now'));
-INSERT INTO visits VALUES (NULL,2,52,'2026-03-06','14:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,2,115,'2026-03-06','14:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,2,53,'2026-03-06','16:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,2,133,'2026-03-06','17:00','planned',datetime('now'));
 
 -- 三見（6件）
 INSERT INTO visits VALUES (NULL,3,121,'2026-03-06','10:00','planned',datetime('now'));
@@ -465,15 +505,15 @@ INSERT INTO visits VALUES (NULL,5,123,'2026-03-06','10:00','planned',datetime('n
 INSERT INTO visits VALUES (NULL,5,144,'2026-03-06','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,83,'2026-03-06','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,84,'2026-03-06','14:00','planned',datetime('now'));
-INSERT INTO visits VALUES (NULL,5,85,'2026-03-06','15:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,5,3,'2026-03-06','15:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,5,86,'2026-03-06','16:00','planned',datetime('now'));
 
 -- 六井（5件）
-INSERT INTO visits VALUES (NULL,6,124,'2026-03-06','09:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,6,146,'2026-03-06','10:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,6,87,'2026-03-06','11:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,6,88,'2026-03-06','13:00','planned',datetime('now'));
 INSERT INTO visits VALUES (NULL,6,89,'2026-03-06','14:00','planned',datetime('now'));
+INSERT INTO visits VALUES (NULL,6,5,'2026-03-06','16:00','planned',datetime('now'));
 
 -- 七川（6件）
 INSERT INTO visits VALUES (NULL,7,125,'2026-03-06','10:00','planned',datetime('now'));
