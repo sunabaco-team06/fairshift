@@ -80,16 +80,6 @@ VALUES
 (4,'2026-03-04','09:00','meeting'),
 (5,'2026-03-04','09:00','meeting');
 
-INSERT INTO user_ng_staff(user_id,staff_id,reason)
-VALUES
-(69,1,'ng'),
-(15,2,'ng'),
-(55,3,'ng'),
-(68,4,'ng'),
-(87,5,'ng'),
-(119,6,'ng'),
-(79,7,'ng');
-
 INSERT INTO "users" VALUES(1,'山田1',1,'any','any','today_required','2026-02-20 12:40:54');
 INSERT INTO "users" VALUES(2,'佐藤2',1,'any','any','today_required','2026-02-20 12:40:54');
 INSERT INTO "users" VALUES(3,'鈴木3',1,'any','any','today_required','2026-02-20 12:40:54');
@@ -241,7 +231,15 @@ INSERT INTO "users" VALUES(148,'小山148',12,'any','any','tomorrow_ok','2026-02
 INSERT INTO "users" VALUES(149,'浅田149',12,'female_only','pt_only','week_ok','2026-02-20 12:40:54');
 INSERT INTO "users" VALUES(150,'横尾150',12,'male_only','any','today_required','2026-02-20 12:40:54');
 
-
+INSERT INTO user_ng_staff(user_id,staff_id,reason)
+VALUES
+(69,1,'ng'),
+(15,2,'ng'),
+(55,3,'ng'),
+(68,4,'ng'),
+(87,5,'ng'),
+(119,6,'ng'),
+(79,7,'ng');
 
 -- 一野（4件）
 INSERT INTO visits (staff_id,user_id,visit_date,visit_time) VALUES (1,12,'2026-03-02','10:00');
