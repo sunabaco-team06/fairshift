@@ -805,6 +805,13 @@ def index():
     DEMO_TOMORROW = "2026-03-03"
 
     d = request.args.get("date") or DEMO_TODAY
+    selected_date = d
+    from datetime import datetime
+
+    # 表示用（日付＋曜日）
+    dt = datetime.strptime(d, "%Y-%m-%d")
+    weekday_ja = ["月", "火", "水", "木", "金", "土", "日"]
+    display_date = f"{dt.month}/{dt.day}（{weekday_ja[dt.weekday()]}）"
 
     staff = fetch_staff_simple()
     schedule = fetch_today_schedule(d)
@@ -849,6 +856,8 @@ def index():
     schedule=schedule,
     slots=SLOTS,
     date=d,
+    display_date=display_date,
+    selected_date=selected_date,
     demo_today=DEMO_TODAY,
     demo_tomorrow=DEMO_TOMORROW,
 )

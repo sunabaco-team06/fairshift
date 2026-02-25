@@ -29,13 +29,17 @@
             
             <div class="d-flex flex-wrap gap-2 align-items-center">
               
-              <!-- 今日 -->
-               <a class="btn btn-outline-primary"
-                  href="/?date={{ demo_today }}">今日</a>
-              
-              <!-- 明日 -->
-               <a class="btn btn-outline-primary"
-                  href="/?date={{ demo_tomorrow }}">明日</a>
+             <!-- 今日 -->
+<a class="btn {{ 'btn-primary' if selected_date == demo_today else 'btn-outline-primary' }}"
+   href="/?date={{ demo_today }}">
+  今日
+</a>
+
+<!-- 明日 -->
+<a class="btn {{ 'btn-primary' if selected_date == demo_tomorrow else 'btn-outline-primary' }}"
+   href="/?date={{ demo_tomorrow }}">
+  明日
+</a>
               
               <!-- 日付を選択 -->
               <div class="d-flex align-items-center gap-2">
@@ -75,14 +79,16 @@
           <div class="col-12 d-flex gap-2">
             <button type="submit" class="btn btn-primary">訪問予定を確認する</button>
             <a href="/staff" class="btn btn-outline-secondary">スタッフ一覧</a>
-            <a href="/absent" class="btn btn-outline-secondary">旧：欠勤者選択</a>
+            
           </div>
         </form>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-header fw-bold">② 今日のスケジュール（9:00〜18:00）</div>
+    <div class="card-header fw-bold">
+  {{ display_date }} のスケジュール（9:00〜18:00）
+</div>
       <div class="card-body">
         <div class="table-responsive">
           <table class="table table-bordered schedule-table mb-0">
