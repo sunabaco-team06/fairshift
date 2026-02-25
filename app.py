@@ -103,7 +103,7 @@ def role_points(role_required: str, staff_role: str) -> Tuple[int, str]:
     staff.role: pt / ot
     """
     if role_required == "any":
-        return 0, "職種条件なし（any）"
+        return 0, "職種条件なし +0"
 
     if role_required == "pt_only":
         if staff_role == "pt":
@@ -115,7 +115,7 @@ def role_points(role_required: str, staff_role: str) -> Tuple[int, str]:
             return 2, "職種一致（OT希望） +2"
         return -2, "職種不一致（OT希望） -2"
 
-    return 0, f"職種条件不明（{role_required}）"
+    return 0, f"職種条件不明（{role_required}） +0"
 
 def time_to_minutes(t: str) -> int:
     # "09:00" -> 540
@@ -931,25 +931,48 @@ def result_batch():
 def confirm_batch():
     date = request.form.get("date") or today_str()
 
-    # result_batch.html から送られてくる元訪問ID一覧
+    # result_batch.html から送られてくる元訪問ID一覧（hiddenで送る想定）
     original_ids = request.form.getlist("original_visit_ids")
     if not original_ids:
         abort(400, description="確定対象の訪問がありません")
 
     # まとめてエラーを出したいので、衝突があれば集める
-    conflicts = []
+    conflicts: list[str] = []
+
+    # スタッフ名を取得（ID表示を避ける）
+    def staff_name_of(staff_id: int) -> str:
+        conn = get_conn()
+        try:
+            row = conn.execute("SELECT name FROM staff WHERE id = ?", (staff_id,)).fetchone()
+            return row["name"] if row else f"スタッフ(ID:{staff_id})"
+        finally:
+            conn.close()
+
+    # ----------------------------------------
+    # 0) フォームの選択内容をいったん全部集める（ここではDB更新しない）
+    #    → 先にバッチ内重複をチェックできる
+    # ----------------------------------------
+    selections = []
+    seen_target_slots = set()  # (new_staff_id, visit_date, proposed_time)
+    seen_originals = set()
 
     for vid_str in original_ids:
-        try:
-            original_visit_id = int(vid_str)
-        except ValueError:
+        if not str(vid_str).isdigit():
             continue
+
+        original_visit_id = int(vid_str)
+
+        # 念のため：同じoriginalが二重に来たら弾く
+        if original_visit_id in seen_originals:
+            conflicts.append("同じ訪問が重複して送信されています（画面を更新してやり直してください）")
+            continue
+        seen_originals.add(original_visit_id)
 
         # choice_<visit_id> を読む（候補0件のvisitはchoiceが無い）
         choice_key = f"choice_{original_visit_id}"
         choice_val = request.form.get(choice_key)
         if not choice_val:
-            # 候補0件など：スキップ
+            # 候補0件など：スキップ（仕様どおり）
             continue
 
         # "staff_id|proposed_time"
@@ -961,55 +984,157 @@ def confirm_batch():
             abort(400, description=f"選択データが不正です: {choice_val}")
 
         v = fetch_visit_detail(original_visit_id)
-        # ✅ すでに振替済の元枠なら弾く
-        if has_active_reassignment_for_original(original_visit_id):
-            conflicts.append(
-                f"訪問ID {original_visit_id} は既に振替済です（重複振替はできません）"
-            )
-            continue
 
+        # 訪問が取れないならスキップ（念のため）
         if v is None:
             continue
 
         user_id = int(v["user_id"])
         visit_date = str(v["visit_date"])
 
-        # 念のため、フォームのdateとDBのvisit_dateがズレてたらDB側を優先
-        # （result_batchはその日のvisitを出してるはずなので）
-        if visit_exists(new_staff_id, visit_date, proposed_time):
-            conflicts.append(
-                f"スタッフID {new_staff_id} の {visit_date} {proposed_time} は既に予定があります"
-            )
+        # ✅ すでに振替済の元枠なら弾く（サーバ側最終防衛）
+        if has_active_reassignment_for_original(original_visit_id):
+            user_name = v["user_name"] if "user_name" in v.keys() else f"訪問ID:{original_visit_id}"
+            conflicts.append(f"すでに振替済の訪問が含まれています：{user_name}（{v['visit_time']}）")
             continue
 
-        # 1) 新しい visit を追加（振替なので status='reassigned'）
-        try:
-            new_visit_id = insert_visit(
-                staff_id=new_staff_id,
-                user_id=user_id,
-                visit_date=visit_date,
-                visit_time=proposed_time,
-                status="reassigned"
-            )
-        except sqlite3.IntegrityError:
-            conflicts.append(
-                f"スタッフID {new_staff_id} の {visit_date} {proposed_time} は既に予定があります（UNIQUE制約）"
-            )
+        # ✅ バッチ内重複（同じスタッフ×日付×時間）を先に弾く
+        slot_key = (new_staff_id, visit_date, proposed_time)
+        if slot_key in seen_target_slots:
+            staff_name = staff_name_of(new_staff_id)
+            conflicts.append(f"同じ振替先枠が複数選ばれています：{staff_name}さん（{proposed_time}）")
             continue
+        seen_target_slots.add(slot_key)
 
-        # 2) reassignments に紐付けを追加
-        insert_reassignment(original_visit_id=original_visit_id, new_visit_id=new_visit_id)
+        selections.append(
+            {
+                "original_visit_id": original_visit_id,
+                "new_staff_id": new_staff_id,
+                "user_id": user_id,
+                "visit_date": visit_date,
+                "proposed_time": proposed_time,
+            }
+        )
 
+    # ここまでで衝突があれば、DBは触らず result_batch を再表示
     if conflicts:
-        # まずはシンプルにエラー表示（次の段階でおしゃれにしてOK）
-        return (
-            "<h2>振替確定できない枠がありました</h2>"
-            + "<ul>" + "".join([f"<li>{c}</li>" for c in conflicts]) + "</ul>"
-            + f'<p><a href="/">トップへ戻る</a>（または戻って選び直してね）</p>'
+        return _render_result_batch_with_conflicts(
+            date=date,
+            original_ids=original_ids,
+            conflicts=conflicts,
         ), 409
+
+    # ----------------------------------------
+    # 1) DB更新はトランザクションでまとめて行う
+    #    → 途中で衝突が出たら全部ロールバック（半端確定を防ぐ）
+    # ----------------------------------------
+    conn = get_conn()
+    try:
+        conn.execute("BEGIN")
+
+        for s in selections:
+            original_visit_id = s["original_visit_id"]
+            new_staff_id = s["new_staff_id"]
+            user_id = s["user_id"]
+            visit_date = s["visit_date"]
+            proposed_time = s["proposed_time"]
+
+            # 直前で埋まった可能性があるので再チェック
+            if visit_exists(new_staff_id, visit_date, proposed_time):
+                staff_name = staff_name_of(new_staff_id)
+                conflicts.append(f"すでに予定が入っています：{staff_name}さん（{proposed_time}）")
+                continue
+
+            # すでに振替済みになった可能性も再チェック
+            if has_active_reassignment_for_original(original_visit_id):
+                v = fetch_visit_detail(original_visit_id)
+                user_name = v["user_name"] if (v is not None and "user_name" in v.keys()) else f"訪問ID:{original_visit_id}"
+                visit_time = v["visit_time"] if (v is not None and "visit_time" in v.keys()) else "-"
+                conflicts.append(f"すでに振替済の訪問が含まれています：{user_name}（{visit_time}）")
+                continue
+
+            # 1) 新しい visit を追加（振替なので status='reassigned'）
+            try:
+                new_visit_id = insert_visit(
+                    staff_id=new_staff_id,
+                    user_id=user_id,
+                    visit_date=visit_date,
+                    visit_time=proposed_time,
+                    status="reassigned",
+                    conn=conn,  # insert_visitがconn対応なら使う
+                )
+            except TypeError:
+                # conn引数に対応してない場合のフォールバック
+                new_visit_id = insert_visit(
+                    staff_id=new_staff_id,
+                    user_id=user_id,
+                    visit_date=visit_date,
+                    visit_time=proposed_time,
+                    status="reassigned",
+                )
+            except sqlite3.IntegrityError:
+                staff_name = staff_name_of(new_staff_id)
+                conflicts.append(f"すでに予定が入っています：{staff_name}さん（{proposed_time}）")
+                continue
+
+            # 2) reassignments に紐付けを追加
+            try:
+                insert_reassignment(original_visit_id=original_visit_id, new_visit_id=new_visit_id, conn=conn)
+            except TypeError:
+                insert_reassignment(original_visit_id=original_visit_id, new_visit_id=new_visit_id)
+
+        if conflicts:
+            conn.execute("ROLLBACK")
+            return _render_result_batch_with_conflicts(
+                date=date,
+                original_ids=original_ids,
+                conflicts=conflicts,
+            ), 409
+
+        conn.execute("COMMIT")
+
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
 
     # いったんトップへ戻す（後で /schedule に変える）
     return redirect(url_for("index", date=date))
+
+
+def _render_result_batch_with_conflicts(date: str, original_ids: list[str], conflicts: list[str]):
+    """
+    confirm_batch で衝突が起きたとき、result_batch と同じ計算で画面を作り直して返す。
+    YuKaの /result_batch のロジックに合わせて results を再生成する。
+    """
+    # original_ids（文字列）→ visit_ids（int）
+    visit_ids = [int(x) for x in original_ids if str(x).isdigit()]
+
+    results: List[Dict[str, Any]] = []
+    for vid in visit_ids:
+        v = fetch_visit_detail(vid)
+        if v is None:
+            continue
+        exclude_ids = [int(v["staff_id"])]
+        candidates = build_candidate_cards_with_fallback(
+            int(v["user_id"]),
+            str(v["visit_date"]),
+            str(v["visit_time"]),
+            exclude_staff_ids=exclude_ids
+        )
+        results.append({
+            "visit": v,
+            "candidates": candidates
+        })
+
+    return render_template(
+        "result_batch.html",
+        results=results,
+        date=date,
+        original_visit_ids=original_ids,  # hidden再送用（テンプレ側で使うなら）
+        conflicts=conflicts
+    )
 
 @app.route("/result")
 def result_json():

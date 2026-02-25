@@ -5,11 +5,19 @@
   <title>振替候補（まとめ）</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    .reason { font-size: 12px; color: #666; }
-    .score { font-weight: 700; }
-    .badge-mini { font-size: 11px; }
-    .cell-muted { color: #888; font-size: 12px; }
-    .pick-col { width: 90px; }
+   body { font-size: 16px; }                /* 全体の基準を上げる */
+   h2 { font-size: 28px; }                  /* 見出し */
+   .text-muted { font-size: 14px; }         /* 日付など */
+   
+   table { font-size: 16px; }               /* テーブル全体 */
+   .table th { font-size: 15px; }           /* 見出し行は少し控えめ */
+   .table td { font-size: 16px; }           /* 本文 */
+   
+   .reason { font-size: 14px; color: #444; }/* 理由（要点） */
+   .score { font-weight: 700; font-size: 18px; } /* スコアを強調 */
+   .badge-mini { font-size: 12px; }
+   .cell-muted { color: #777; font-size: 13px; }
+   .pick-col { width: 90px; }
   </style>
 </head>
 <body class="bg-light">
@@ -24,6 +32,21 @@
         <a href="/" class="btn btn-outline-secondary">← トップへ</a>
       </div>
     </div>
+
+    <!-- ★ conflicts があるときだけ、同じ画面上にエラーを表示 -->
+    {% if conflicts %}
+      <div class="alert alert-danger" role="alert">
+        <strong>振替確定できない枠がありました</strong>
+        <ul class="mb-0">
+          {% for c in conflicts %}
+            <li>{{ c }}</li>
+          {% endfor %}
+        </ul>
+        <div class="mt-2">
+          <span class="text-muted small">※候補を選び直して、もう一度「確定」を押してください。</span>
+        </div>
+      </div>
+    {% endif %}
 
     {% if results|length == 0 %}
       <div class="alert alert-warning">対象データがありません</div>
@@ -100,9 +123,22 @@
 
                       <td class="reason">
                         <ul class="mb-0">
-                          {% for reason in c.reasons %}
-                            <li>{{ reason }}</li>
-                          {% endfor %}
+                            {% for reason in c.reasons %}
+                            {# 距離の参考行は表示しない #}
+                            {% if "距離:" in reason %}
+                                {# skip #}
+                            {% else %}
+                                <li>
+                                {{ reason
+                                    | replace("職種条件なし（any）", "職種条件なし +0")
+                                    | replace("性別条件なし（any）", "性別条件なし +0")
+                                    | replace("→+", " +")
+                                    | replace("→-", " -")
+                                    | replace("→", " ")
+                                }}
+                                </li>
+                            {% endif %}
+                            {% endfor %}
                         </ul>
                       </td>
                     </tr>
@@ -111,9 +147,6 @@
                 </table>
               </div>
 
-              <div class="form-text mt-2">
-                ※この訪問は候補から1つ選択されています（変更OK）
-              </div>
             {% endif %}
           </div>
         </div>
@@ -127,11 +160,6 @@
         </div>
       {% endif %}
     </form>
-
-    <div class="text-muted small mt-3">
-      ※「別時間」は、同時間帯の候補が0件だった場合に、9:00〜18:00（12:00は除外）の空き枠から候補を作っています。<br>
-      ※確定すると「新しい訪問予定（新visit）」を追加し、振替履歴（reassignments）に記録します。
-    </div>
 
   </div>
 </body>
