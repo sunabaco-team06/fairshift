@@ -853,10 +853,161 @@ def index():
     demo_tomorrow=DEMO_TOMORROW,
 )
 
-@app.route("/staff")
-def staff_list():
-    staff = fetch_staff_full()
-    return render_template("staff.html", staff=staff)
+# ----------------------------
+# Staff (スタッフ) screens
+# ----------------------------
+
+def fetch_staff() -> List[sqlite3.Row]:
+    conn = get_conn()
+    try:
+        return conn.execute("""
+            SELECT id, name, gender, role
+            FROM staff
+            ORDER BY id
+        """).fetchall()
+    finally:
+        conn.close()
+
+
+def fetch_staff_by_id(staff_id: int) -> Optional[sqlite3.Row]:
+    conn = get_conn()
+    try:
+        return conn.execute("""
+            SELECT id, name, gender, role
+            FROM staff
+            WHERE id = ?
+        """, (staff_id,)).fetchone()
+    finally:
+        conn.close()
+
+
+def insert_staff(name: str, gender: str, role: str) -> None:
+    conn = get_conn()
+    try:
+        conn.execute("""
+            INSERT INTO staff (name, gender, role)
+            VALUES (?, ?, ?)
+        """, (name, gender, role))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def update_staff(staff_id: int, name: str, gender: str, role: str) -> None:
+    conn = get_conn()
+    try:
+        conn.execute("""
+            UPDATE staff
+            SET name = ?, gender = ?, role = ?
+            WHERE id = ?
+        """, (name, gender, role, staff_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_staff(staff_id: int) -> None:
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM staff WHERE id = ?", (staff_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@app.route("/staff", methods=["GET"])
+def staff_index():
+    msg = request.args.get("msg")
+    edit_mode = request.args.get("edit") == "1"
+
+    edit_staff_id = request.args.get("edit_staff_id")
+    edit_staff = None
+    if edit_mode and edit_staff_id and edit_staff_id.isdigit():
+        edit_staff = fetch_staff_by_id(int(edit_staff_id))
+
+    staff_list = fetch_staff()
+
+    # 表示用ラベル
+    gender_labels = {
+        "F": "女性",
+        "M": "男性",
+    }
+    role_labels = {
+        "nurse": "看護師",
+        "pt": "PT",
+        "ot": "OT",
+    }
+
+    return render_template(
+        "staff.html",
+        staff_list=staff_list,
+        msg=msg,
+        edit_mode=edit_mode,
+        edit_staff=edit_staff,
+        gender_labels=gender_labels,
+        role_labels=role_labels,
+    )
+
+
+@app.route("/staff/create", methods=["POST"])
+def staff_create():
+    name = (request.form.get("name") or "").strip()
+    gender = request.form.get("gender")
+    role = request.form.get("role")
+
+    if not name:
+        return redirect(url_for("staff_index", msg="名前を入力してください。"))
+
+    valid_gender = {"F", "M"}
+    valid_role = {"nurse", "pt", "ot"}
+
+    if gender not in valid_gender:
+        return redirect(url_for("staff_index", msg="性別を選択してください。"))
+    if role not in valid_role:
+        return redirect(url_for("staff_index", msg="職種を選択してください。"))
+
+    try:
+        insert_staff(name, gender, role)
+    except sqlite3.IntegrityError as e:
+        return redirect(url_for("staff_index", msg=f"登録できませんでした: {e}"))
+
+    return redirect(url_for("staff_index", msg="スタッフを登録しました。"))
+
+
+@app.route("/staff/update/<int:staff_id>", methods=["POST"])
+def staff_update(staff_id: int):
+    name = (request.form.get("name") or "").strip()
+    gender = request.form.get("gender")
+    role = request.form.get("role")
+
+    if not name:
+        return redirect(url_for("staff_index", edit=1, edit_staff_id=staff_id, msg="名前を入力してください。"))
+
+    valid_gender = {"F", "M"}
+    valid_role = {"nurse", "pt", "ot"}
+
+    if gender not in valid_gender:
+        return redirect(url_for("staff_index", edit=1, edit_staff_id=staff_id, msg="性別を選択してください。"))
+    if role not in valid_role:
+        return redirect(url_for("staff_index", edit=1, edit_staff_id=staff_id, msg="職種を選択してください。"))
+
+    try:
+        update_staff(staff_id, name, gender, role)
+    except sqlite3.IntegrityError as e:
+        return redirect(url_for("staff_index", edit=1, edit_staff_id=staff_id, msg=f"更新できませんでした: {e}"))
+
+    return redirect(url_for("staff_index", msg="スタッフを更新しました。"))
+
+
+@app.route("/staff/delete/<int:staff_id>", methods=["POST"])
+def staff_delete(staff_id: int):
+    try:
+        delete_staff(staff_id)
+    except sqlite3.IntegrityError:
+        # visitsなどに紐づいていると削除できない
+        return redirect(url_for("staff_index", msg="このスタッフは予定に紐づいているため削除できません。"))
+
+    return redirect(url_for("staff_index", msg="スタッフを削除しました。"))
 
 
 @app.route("/absent")
@@ -1223,6 +1374,205 @@ def debug_candidates():
         "candidates": candidates
     }
 
+from flask import Flask, render_template, request, abort, redirect, url_for
+import sqlite3
+from typing import List, Dict, Any, Optional
+
+# ----------------------------
+# Users (利用者) screens
+# ----------------------------
+
+def fetch_areas() -> List[sqlite3.Row]:
+    conn = get_conn()
+    try:
+        return conn.execute("SELECT id, name FROM areas ORDER BY id").fetchall()
+    finally:
+        conn.close()
+
+
+def fetch_users() -> List[sqlite3.Row]:
+    conn = get_conn()
+    try:
+        return conn.execute("""
+            SELECT
+              u.id,
+              u.name,
+              u.area_id,
+              a.name AS area_name,
+              u.gender_preference,
+              u.role_required,
+              u.priority,
+              u.created_at
+            FROM users u
+            JOIN areas a ON a.id = u.area_id
+            ORDER BY u.id
+        """).fetchall()
+    finally:
+        conn.close()
+
+
+def fetch_user_by_id(user_id: int) -> Optional[sqlite3.Row]:
+    conn = get_conn()
+    try:
+        return conn.execute("""
+            SELECT
+              u.id,
+              u.name,
+              u.area_id,
+              u.gender_preference,
+              u.role_required,
+              u.priority
+            FROM users u
+            WHERE u.id = ?
+        """, (user_id,)).fetchone()
+    finally:
+        conn.close()
+
+
+def insert_user(name: str, area_id: int, gender_preference: str, role_required: str, priority: str) -> None:
+    conn = get_conn()
+    try:
+        conn.execute("""
+            INSERT INTO users (name, area_id, gender_preference, role_required, priority)
+            VALUES (?, ?, ?, ?, ?)
+        """, (name, area_id, gender_preference, role_required, priority))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def update_user(user_id: int, name: str, area_id: int, gender_preference: str, role_required: str, priority: str) -> None:
+    conn = get_conn()
+    try:
+        conn.execute("""
+            UPDATE users
+            SET name = ?, area_id = ?, gender_preference = ?, role_required = ?, priority = ?
+            WHERE id = ?
+        """, (name, area_id, gender_preference, role_required, priority, user_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_user(user_id: int) -> None:
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _user_labels() -> tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
+    gender_labels = {
+        "any": "性別希望なし",
+        "female_only": "女性希望",
+        "male_only": "男性希望",
+    }
+    role_labels = {
+        "any": "職種希望なし",
+        "nurse_only": "看護師のみ",
+        "pt_only": "PTのみ",
+        "ot_only": "OTのみ",
+    }
+    priority_labels = {
+        "today_required": "今日必須",
+        "tomorrow_ok": "明日でもOK",
+        "week_ok": "今週中でOK",
+    }
+    return gender_labels, role_labels, priority_labels
+
+
+def _validate_user_form(form: Any) -> tuple[Optional[str], Optional[int], Optional[str], Optional[str], Optional[str], Optional[str]]:
+    name = (form.get("name") or "").strip()
+    area_id_str = form.get("area_id")
+    gender_preference = form.get("gender_preference")
+    role_required = form.get("role_required")
+    priority = form.get("priority")
+
+    if not name:
+        return "利用者名を入力してください。", None, None, None, None, None
+    if not (area_id_str and area_id_str.isdigit()):
+        return "中学校区（エリア）を選択してください。", None, None, None, None, None
+
+    area_id = int(area_id_str)
+
+    valid_gender = {"any", "female_only", "male_only"}
+    valid_role = {"any", "nurse_only", "pt_only", "ot_only"}
+    valid_priority = {"today_required", "tomorrow_ok", "week_ok"}
+
+    if gender_preference not in valid_gender:
+        return "性別希望の値が不正です。", None, None, None, None, None
+    if role_required not in valid_role:
+        return "職種希望の値が不正です。", None, None, None, None, None
+    if priority not in valid_priority:
+        return "優先度の値が不正です。", None, None, None, None, None
+
+    return None, area_id, name, gender_preference, role_required, priority
+
+
+@app.route("/users", methods=["GET"])
+def users_index():
+    msg = request.args.get("msg")
+    edit_mode = (request.args.get("edit") == "1")
+    edit_user_id_str = request.args.get("edit_user_id")
+
+    users = fetch_users()
+    areas = fetch_areas()
+    gender_labels, role_labels, priority_labels = _user_labels()
+
+    edit_user = None
+    if edit_mode and edit_user_id_str and edit_user_id_str.isdigit():
+        edit_user = fetch_user_by_id(int(edit_user_id_str))
+
+    return render_template(
+        "users.html",
+        users=users,
+        areas=areas,
+        msg=msg,
+        edit_mode=edit_mode,
+        edit_user=edit_user,
+        gender_labels=gender_labels,
+        role_labels=role_labels,
+        priority_labels=priority_labels,
+    )
+
+
+@app.route("/users/create", methods=["POST"])
+def users_create():
+    msg, area_id, name, gender_preference, role_required, priority = _validate_user_form(request.form)
+    if msg:
+        return redirect(url_for("users_index", msg=msg))
+
+    try:
+        insert_user(name, area_id, gender_preference, role_required, priority)
+    except sqlite3.IntegrityError as e:
+        return redirect(url_for("users_index", msg=f"登録できませんでした: {e}"))
+
+    return redirect(url_for("users_index", msg="利用者を登録しました。"))
+
+
+@app.route("/users/update/<int:user_id>", methods=["POST"])
+def users_update(user_id: int):
+    msg, area_id, name, gender_preference, role_required, priority = _validate_user_form(request.form)
+    if msg:
+        return redirect(url_for("users_index", edit=1, edit_user_id=user_id, msg=msg))
+
+    try:
+        update_user(user_id, name, area_id, gender_preference, role_required, priority)
+    except sqlite3.IntegrityError as e:
+        return redirect(url_for("users_index", edit=1, edit_user_id=user_id, msg=f"更新できませんでした: {e}"))
+
+    return redirect(url_for("users_index", msg="利用者を更新しました。"))
+
+
+@app.route("/users/delete/<int:user_id>", methods=["POST"])
+def users_delete(user_id: int):
+    try:
+        delete_user(user_id)
+    except sqlite3.IntegrityError:
+        return redirect(url_for("users_index", msg="この利用者は予定に紐づいているため削除できません。"))
+    return redirect(url_for("users_index", msg="利用者を削除しました。"))
 
 if __name__ == "__main__":
     app.run(debug=True)
