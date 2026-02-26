@@ -28,47 +28,50 @@
             この条件の訪問はありません（データ0件）
           </div>
         {% else %}
-          <form method="POST" action="/result_batch">
-            <input type="hidden" name="date" value="{{ date }}">
+         <form method="POST" action="/result_batch">
+  <input type="hidden" name="date" value="{{ date }}">
 
-            <div class="table-responsive">
-              <table class="table table-bordered align-middle">
-                <thead class="table-light">
-                  <tr>
-                    <th style="width:80px;">選択</th>
-                    <th style="width:120px;">時間</th>
-                    <th>利用者</th>
-                    <th style="width:160px;">エリア</th>
-                    <th style="width:160px;">元担当（欠勤）</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for v in visits %}
-                  <tr class="{% if v.is_already_reassigned %}table-secondary{% endif %}">
-                    <td class="text-center">
-                      <input type="checkbox"
-                             name="visit_ids"
-                             value="{{ v.id }}"
-                             {% if v.is_already_reassigned %}disabled{% endif %}>
-                    </td>
+  <!-- まとめて選択ボタンを追加 -->
+  <div class="mb-2">
+    <button type="button" class="btn btn-outline-primary btn-sm" onclick="selectMorning()">午前</button>
+    <button type="button" class="btn btn-outline-primary btn-sm" onclick="selectAfternoon()">午後</button>
+    <button type="button" class="btn btn-outline-primary btn-sm" onclick="selectAll()">全選択</button>
+    <button type="button" class="btn btn-outline-secondary" onclick="clearAll()">
+  クリア
+</button>
+  </div>
 
-                    <td>
-                      {{ v.visit_time }}
-                      {% if v.is_already_reassigned %}
-                        <span class="badge bg-secondary ms-2">✓振替済</span>
-                      {% endif %}
-                    </td>
-
-                    <td>{{ v.user_name }}</td>
-                    <td>{{ v.area_name }}</td>
-                    <td>{{ v.staff_name }}</td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-
-            <div class="d-flex gap-2">
+<div class="table-responsive">
+  <table class="table table-bordered align-middle">
+    <thead class="table-light">
+      <tr>
+        <th style="width:80px;">選択</th>
+        <th style="width:120px;">時間</th>
+        <th>利用者</th>
+        <th style="width:160px;">エリア</th>
+        <th style="width:160px;">元担当（欠勤）</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for v in visits %}
+      <tr class="{% if v.is_already_reassigned %}table-secondary{% endif %}">
+        <td class="text-center">
+          <input type="checkbox"
+                 class="visit-checkbox"
+                 name="visit_ids"
+                 value="{{ v.id }}"
+                 data-time="{{ v.visit_time }}"
+                 {% if v.is_already_reassigned %}disabled{% endif %}>
+        </td>
+        <td>{{ v.visit_time }}</td>
+        <td>{{ v.user_name }}</td>
+        <td>{{ v.area_name }}</td>
+        <td>{{ v.staff_name }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+              <div class="d-flex gap-2">
               <button type="submit" class="btn btn-primary">候補を見る</button>
               <a href="/" class="btn btn-outline-secondary">キャンセル</a>
             </div>
@@ -81,7 +84,35 @@
 
       </div>
     </div>
+    <script>
+  function selectMorning() {
+    document.querySelectorAll('.visit-checkbox').forEach(cb => {
+      if (!cb.disabled && cb.dataset.time < "12:00") {
+        cb.checked = true;
+      }
+    });
+  }
 
+  function selectAfternoon() {
+    document.querySelectorAll('.visit-checkbox').forEach(cb => {
+      if (!cb.disabled && cb.dataset.time >= "12:00") {
+        cb.checked = true;
+      }
+    });
+  }
+
+  function selectAll() {
+    document.querySelectorAll('.visit-checkbox').forEach(cb => {
+      if (!cb.disabled) cb.checked = true;
+    });
+  }
+
+  function clearAll() {
+    document.querySelectorAll('.visit-checkbox').forEach(cb => {
+      if (!cb.disabled) cb.checked = false;
+    });
+  }
+</script>
   </div>
 </body>
 </html>

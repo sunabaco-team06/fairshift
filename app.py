@@ -12,7 +12,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "fairshift_test.db"
 
 # スケジュール表示の時間枠（前提：1時間枠）
-SLOTS = [f"{h:02d}:00" for h in range(9, 19) if h != 12]
+SLOTS = [f"{h:02d}:00" for h in range(9, 18) if h != 12]
 
 
 # ----------------------------
