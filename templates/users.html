@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>利用者一覧</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+  <div class="container py-4">
+
+    <!-- ヘッダー -->
+    <div class="d-flex justify-content-between align-items-end mb-3">
+      <div>
+        <h2 class="fw-bold mb-1">利用者一覧</h2>
+      </div>
+
+      <div class="d-flex gap-2">
+        <a href="/" class="btn btn-outline-secondary">← トップへ</a>
+      </div>
+    </div>
+
+    {% if msg %}
+      <div class="alert alert-success bg-success-subtle border border-success-subtle text-success-emphasis">
+        {{ msg }}
+      </div>
+    {% endif %}
+
+    <div class="card shadow-sm">
+      <div class="card-body">
+
+        <!-- 左上：ボタン位置を固定（detailsの開閉でズレないようにする） -->
+        <div class="d-flex align-items-start gap-2 mb-2 flex-wrap">
+
+          <!-- ボタン列（ここを固定） -->
+          <div class="d-flex gap-2">
+            <button
+            type="button"
+            class="btn btn-primary"
+            id="toggleAddFormBtn"
+            data-open-text="入力モードを終了"
+            data-closed-text="{% if edit_user %}利用者を修正{% else %}利用者を追加{% endif %}"
+            >
+            {% if edit_user %}利用者を修正{% else %}利用者を追加{% endif %}
+            </button>
+
+            {% if edit_mode %}
+              <!-- 編集モード終了：修正ボタンの反対色（= 塗りつぶし + 薄め） -->
+              <a href="/users" class="btn btn-outline-success">編集モードを終了</a>
+            {% else %}
+              <!-- 登録内容の修正：塗りつぶし + 白字（追加と色分け） -->
+              <a href="/users?edit=1" class="btn btn-success">登録内容の修正</a>
+            {% endif %}
+          </div>
+
+          <!-- フォーム領域（幅をしっかり確保） -->
+          <div class="w-100">
+
+            <!-- detailsはボタンとは別に置く（開閉してもボタン列が動かない） -->
+            <details id="addUserForm" class="mt-2" {% if edit_user %}open{% endif %}>
+              <!-- summaryは使わない（ボタンで開閉する） -->
+              <summary class="d-none">フォーム</summary>
+
+              <div class="card">
+                <div class="card-body">
+
+                  {% if edit_user %}
+                    <form method="post" action="/users/update/{{ edit_user.id }}">
+                  {% else %}
+                    <form method="post" action="/users/create">
+                  {% endif %}
+
+                    <div class="row g-3">
+                      <div class="col-md-4">
+                        <label class="form-label">利用者名</label>
+                        <input type="text" name="name" class="form-control" required
+                               value="{% if edit_user %}{{ edit_user.name }}{% endif %}">
+                      </div>
+
+                      <div class="col-md-2">
+                        <label class="form-label">中学校区</label>
+                        <select name="area_id" class="form-select" required>
+                          <option value="" disabled {% if not edit_user %}selected{% endif %}>選択してください</option>
+                          {% for a in areas %}
+                            <option value="{{ a.id }}"
+                                    {% if edit_user and edit_user.area_id == a.id %}selected{% endif %}>
+                              {{ a.name }}
+                            </option>
+                          {% endfor %}
+                        </select>
+                      </div>
+
+                      <div class="col-md-2">
+                        <label class="form-label">性別希望</label>
+                        <select name="gender_preference" class="form-select" required>
+                          <option value="" disabled {% if not edit_user %}selected{% endif %}>選択してください</option>
+                          {% for k, v in gender_labels.items() %}
+                            <option value="{{ k }}"
+                                    {% if edit_user and edit_user.gender_preference == k %}selected{% endif %}>
+                              {{ v }}
+                            </option>
+                          {% endfor %}
+                        </select>
+                      </div>
+
+                      <div class="col-md-2">
+                        <label class="form-label">職種希望</label>
+                        <select name="role_required" class="form-select" required>
+                          <option value="" disabled {% if not edit_user %}selected{% endif %}>選択してください</option>
+                          {% for k, v in role_labels.items() %}
+                            <option value="{{ k }}"
+                                    {% if edit_user and edit_user.role_required == k %}selected{% endif %}>
+                              {{ v }}
+                            </option>
+                          {% endfor %}
+                        </select>
+                      </div>
+
+                      <div class="col-md-2">
+                        <label class="form-label">優先度</label>
+                        <select name="priority" class="form-select" required>
+                          <option value="" disabled {% if not edit_user %}selected{% endif %}>選択してください</option>
+                          {% for k, v in priority_labels.items() %}
+                            <option value="{{ k }}"
+                                    {% if edit_user and edit_user.priority == k %}selected{% endif %}>
+                              {{ v }}
+                            </option>
+                          {% endfor %}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                      {% if edit_user %}
+                        <a href="/users?edit=1" class="btn btn-outline-secondary">キャンセル</a>
+                        <button type="submit" class="btn btn-primary">更新する</button>
+
+                        <!-- 削除は必ず確認する（confirm必須） -->
+                        <button form="deleteForm{{ edit_user.id }}" type="submit" class="btn btn-outline-danger"
+                                onclick="return confirm('本当にこの利用者を削除しますか？\\（予定に紐づく場合は削除できません）');">
+                          削除
+                        </button>
+                      {% else %}
+                        <button type="submit" class="btn btn-primary">登録</button>
+                      {% endif %}
+                    </div>
+
+                  </form>
+
+                  {% if edit_user %}
+                    <form id="deleteForm{{ edit_user.id }}" method="POST" action="/users/delete/{{ edit_user.id }}"></form>
+                  {% endif %}
+
+                </div>
+              </div>
+            </details>
+
+          </div>
+        </div>
+
+        <!-- テーブル -->
+        <div class="table-responsive" style="max-height: 70vh;">
+          <table class="table table-striped table-hover align-middle mb-0"
+                 style="table-layout: fixed; width: 100%;">
+            <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+            <tr>
+                <th style="width:70px;">ID</th>
+                <th style="width:30%;">利用者名</th>
+                <th style="width:20%;">中学校区</th>
+                <th style="width:25%;">性別希望</th>
+                <th style="width:25%;">職種希望</th>
+                {% if edit_mode %}
+                <th style="width:100px;">修正</th>
+                {% endif %}
+            </tr>
+            </thead>
+
+            <tbody>
+              {% for u in users %}
+                <tr>
+                  <td class="text-center">{{ u.id }}</td>
+                  <td>{{ u.name }}</td>
+                  <td>{{ u.area_name }}</td>
+                  <td>{{ gender_labels.get(u.gender_preference, u.gender_preference) }}</td>
+                  <td>{{ role_labels.get(u.role_required, u.role_required) }}</td>
+
+                  {% if edit_mode %}
+                    <td class="text-center">
+                      <a class="btn btn-sm btn-outline-success"
+                         href="/users?edit=1&edit_user_id={{ u.id }}#addUserForm">
+                        修正
+                      </a>
+                    </td>
+                  {% endif %}
+                </tr>
+              {% endfor %}
+
+              {% if users|length == 0 %}
+                <tr>
+                  <td colspan="{% if edit_mode %}6{% else %}5{% endif %}" class="text-center text-muted">
+                    利用者がまだ登録されていません
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+    <script>
+    const btn = document.getElementById("toggleAddFormBtn");
+    const details = document.getElementById("addUserForm");
+
+    function updateBtn() {
+        const openText = btn.dataset.openText || "入力モードを終了";
+        const closedText = btn.dataset.closedText || "利用者を追加";
+
+        if (details.open) {
+        btn.textContent = openText;
+        btn.classList.remove("btn-primary");
+        btn.classList.add("btn-outline-primary"); // 開いてるときは白背景にして区別
+        } else {
+        btn.textContent = closedText;
+        btn.classList.remove("btn-outline-primary");
+        btn.classList.add("btn-primary");
+        }
+    }
+
+    if (btn && details) {
+        // 初期状態反映
+        updateBtn();
+
+        btn.addEventListener("click", () => {
+        details.open = !details.open;
+        updateBtn();
+
+        if (details.open) {
+            details.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        });
+
+        // detailsが別操作で開閉された場合にも追従
+        details.addEventListener("toggle", updateBtn);
+    }
+    </script>
+</body>
+</html>
